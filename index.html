@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTC Risk Stratification Tool — ATA 2025</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e14;
+    --surface: #131720;
+    --surface2: #1a2030;
+    --border: #252d3d;
+    --border-light: #2e3a52;
+    --text: #e8edf5;
+    --text-muted: #7a8ba8;
+    --text-dim: #4a5a72;
+    --accent: #4fc3f7;
+    --accent-glow: rgba(79,195,247,0.15);
+    --low: #22c55e;
+    --low-int: #84cc16;
+    --int-high: #f59e0b;
+    --high: #ef4444;
+    --low-bg: rgba(34,197,94,0.08);
+    --low-int-bg: rgba(132,204,22,0.08);
+    --int-high-bg: rgba(245,158,11,0.08);
+    --high-bg: rgba(239,68,68,0.08);
+    --input-bg: #0f1420;
+    --radius: 10px;
+    --transition: 0.2s ease;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Sora', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,195,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,195,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* HEADER */
+  .header { text-align: center; margin-bottom: 48px; }
+  .header-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border-light);
+    border-radius: 100px; padding: 6px 16px; margin-bottom: 20px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent);
+    letter-spacing: 0.08em;
+  }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+  h1 span { color: var(--accent); }
+  .subtitle { margin-top: 8px; font-size: 14px; color: var(--text-muted); font-weight: 300; }
+  .disclaimer {
+    margin-top: 16px; padding: 10px 16px; background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.3); border-radius: var(--radius);
+    font-size: 12px; color: #f59e0b; text-align: left;
+  }
+
+  /* PROGRESS */
+  .progress-bar {
+    display: flex; gap: 4px; margin-bottom: 36px;
+  }
+  .progress-step {
+    flex: 1; height: 3px; border-radius: 2px;
+    background: var(--border); transition: background 0.4s ease;
+  }
+  .progress-step.done { background: var(--accent); }
+  .progress-step.active { background: var(--accent); opacity: 0.5; }
+
+  /* STEP LABEL */
+  .step-label {
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .step-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 20px; }
+
+  /* CARD */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--border-light); }
+  .card-header { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 16px; }
+
+  /* FORM ELEMENTS */
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: block; font-size: 13px; color: var(--text-muted);
+    margin-bottom: 6px; font-weight: 400;
+  }
+  .field label span { color: var(--accent); }
+  .field select, .field input[type="number"], .field input[type="text"] {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    font-size: 13px;
+    padding: 10px 14px;
+    transition: border-color var(--transition);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .field select:focus, .field input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79,195,247,0.1);
+  }
+  select option { background: #131720; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* TOGGLE RADIO */
+  .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggle-btn {
+    padding: 8px 16px; border: 1px solid var(--border);
+    border-radius: 8px; background: transparent;
+    color: var(--text-muted); font-size: 12px; font-family: 'Sora', sans-serif;
+    cursor: pointer; transition: all var(--transition);
+    white-space: nowrap;
+  }
+  .toggle-btn:hover { border-color: var(--border-light); color: var(--text); }
+  .toggle-btn.active { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
+
+  /* BUTTONS */
+  .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+  .btn {
+    padding: 11px 24px; border-radius: 9px; font-family: 'Sora', sans-serif;
+    font-size: 13px; font-weight: 500; cursor: pointer; transition: all var(--transition);
+    border: none; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-secondary { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--border-light); color: var(--text); }
+  .btn-primary {
+    background: var(--accent); color: #0b0e14; font-weight: 600;
+    box-shadow: 0 0 20px rgba(79,195,247,0.2);
+  }
+  .btn-primary:hover { box-shadow: 0 0 30px rgba(79,195,247,0.35); transform: translateY(-1px); }
+  .btn-reset { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+
+  /* INFO BOX */
+  .info-box {
+    padding: 10px 14px; background: rgba(79,195,247,0.06); border: 1px solid rgba(79,195,247,0.2);
+    border-radius: 8px; font-size: 12px; color: var(--text-muted); margin-top: 10px;
+  }
+  .info-box b { color: var(--accent); }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* ======= RESULT SECTION ======= */
+  #result-section { display: none; }
+
+  .result-banner {
+    border-radius: 14px; padding: 32px;
+    text-align: center; margin-bottom: 24px;
+    position: relative; overflow: hidden;
+    border: 1px solid;
+  }
+  .result-banner::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, var(--glow-color, rgba(79,195,247,0.15)) 0%, transparent 70%);
+  }
+  .result-banner .risk-label {
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
+    text-transform: uppercase; opacity: 0.7; margin-bottom: 8px;
+  }
+  .result-banner .risk-title { font-size: 36px; font-weight: 700; margin-bottom: 4px; }
+  .result-banner .risk-sub { font-size: 14px; opacity: 0.75; }
+
+  .result-banner.low { background: var(--low-bg); border-color: var(--low); color: var(--low); --glow-color: rgba(34,197,94,0.2); }
+  .result-banner.low-int { background: var(--low-int-bg); border-color: var(--low-int); color: var(--low-int); --glow-color: rgba(132,204,22,0.2); }
+  .result-banner.int-high { background: var(--int-high-bg); border-color: var(--int-high); color: var(--int-high); --glow-color: rgba(245,158,11,0.2); }
+  .result-banner.high { background: var(--high-bg); border-color: var(--high); color: var(--high); --glow-color: rgba(239,68,68,0.2); }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .result-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .result-card .rc-label { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .result-card .rc-value { font-size: 18px; font-weight: 600; }
+  .result-card .rc-detail { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .follow-up-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 16px; overflow: hidden;
+  }
+  .follow-up-header {
+    padding: 14px 20px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .follow-up-header .fh-icon { font-size: 16px; }
+  .follow-up-body { padding: 18px 20px; }
+  .follow-up-body p { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+  .follow-up-body p:last-child { margin-bottom: 0; }
+  .follow-up-body .highlight { color: var(--text); font-weight: 500; }
+  .follow-up-body ul { margin: 8px 0 8px 18px; }
+  .follow-up-body li { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+  .follow-up-body li .hl { color: var(--text); font-weight: 500; }
+
+  .tag {
+    display: inline-block; padding: 3px 10px; border-radius: 100px;
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    letter-spacing: 0.04em; font-weight: 500;
+  }
+  .tag-low { background: var(--low-bg); color: var(--low); border: 1px solid rgba(34,197,94,0.3); }
+  .tag-low-int { background: var(--low-int-bg); color: var(--low-int); border: 1px solid rgba(132,204,22,0.3); }
+  .tag-int-high { background: var(--int-high-bg); color: var(--int-high); border: 1px solid rgba(245,158,11,0.3); }
+  .tag-high { background: var(--high-bg); color: var(--high); border: 1px solid rgba(239,68,68,0.3); }
+  .tag-blue { background: rgba(79,195,247,0.08); color: var(--accent); border: 1px solid rgba(79,195,247,0.3); }
+
+  .section-divider {
+    display: flex; align-items: center; gap: 12px; margin: 28px 0 20px;
+  }
+  .section-divider span { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; white-space: nowrap; }
+  .section-divider::before, .section-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  .response-box {
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 14px;
+    border: 1px solid; font-size: 13px;
+  }
+  .response-box .rb-title { font-weight: 600; margin-bottom: 4px; }
+  .response-box .rb-detail { font-size: 12px; opacity: 0.8; }
+
+  .response-excellent { background: rgba(34,197,94,0.07); border-color: rgba(34,197,94,0.4); color: #22c55e; }
+  .response-indeterminate { background: rgba(79,195,247,0.07); border-color: rgba(79,195,247,0.4); color: #4fc3f7; }
+  .response-biochem { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.4); color: #f59e0b; }
+  .response-structural { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.4); color: #ef4444; }
+
+  .hidden { display: none !important; }
+
+  /* PRINT */
+
+  @media (max-width: 600px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+    .result-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 22px; }
+    .result-banner .risk-title { font-size: 28px; }
+  }
+
+  .step-section { display: none; }
+  .step-section.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .required-asterisk { color: #ef4444; }
+
+  .tg-tgab-note {
+    background: rgba(79,195,247,0.05); border: 1px solid rgba(79,195,247,0.2);
+    border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--text-muted);
+    margin-top: 12px;
+  }
+  .tg-tgab-note b { color: var(--accent); }
+
+  /* Recommendation strength indicator */
+  .rec-strength {
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    color: var(--text-dim); margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-badge">
+      <div class="badge-dot"></div>
+      ATA 2025 Guidelines — DTC Management
+    </div>
+    <h1>Differentiated Thyroid Cancer<br><span>Risk Stratification & Follow-up Planner</span></h1>
+    <p class="subtitle">Based on 2025 American Thyroid Association Management Guidelines for Adult Patients with DTC</p>
+    <div class="disclaimer">
+      ⚠️ <strong>Clinical Decision Support Tool Only.</strong> This tool is intended to assist trained clinicians and does not replace clinical judgment. All recommendations must be interpreted in the context of individual patient circumstances. Reference: Ringel MD, Sosa JA, et al. <em>Thyroid</em>. 2025;35(8). DOI: 10.1177/10507256251363120
+    </div>
+  </div>
+
+  <!-- PROGRESS BAR -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-step active" id="ps1"></div>
+    <div class="progress-step" id="ps2"></div>
+    <div class="progress-step" id="ps3"></div>
+    <div class="progress-step" id="ps4"></div>
+    <div class="progress-step" id="ps5"></div>
+  </div>
+
+  <!-- FORM SECTION -->
+  <div id="form-section">
+
+    <!-- STEP 1: Tumor & Surgery -->
+    <div class="step-section active" id="step1">
+      <div class="step-label">Step 1 of 5</div>
+      <div class="step-title">Tumor Characteristics & Surgery</div>
+
+      <div class="card">
+        <div class="card-header">Histology & Tumor Type</div>
+        <div class="field">
+          <label>Histological Type <span class="required-asterisk">*</span></label>
+          <select id="histology">
+            <option value="">— Select —</option>
+            <option value="PTC">PTC — Papillary Thyroid Carcinoma (classical)</option>
+            <option value="PTC-TCV">PTC — Tall Cell Variant (TCV)</option>
+            <option value="PTC-columnar">PTC — Columnar Cell / Diffuse Sclerosing / Hobnail / Solid Variant</option>
+            <option value="FVPTC-encapsulated">PTC — Encapsulated FVPTC / IEFVPTC</option>
+            <option value="FTC-minimally">FTC — Minimally Invasive (capsular only)</option>
+            <option value="FTC-extensive">FTC — Extensively Invasive / Widely Invasive</option>
+            <option value="OTC">OTC — Oncocytic Thyroid Carcinoma</option>
+          </select>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label>Tumor Size (largest dimension, cm) <span class="required-asterisk">*</span></label>
+            <input type="number" id="tumorSize" step="0.1" min="0" max="20" placeholder="e.g. 2.5">
+          </div>
+          <div class="field">
+            <label>T Category (AJCC 8th Ed) <span class="required-asterisk">*</span></label>
+            <select id="tCategory">
+              <option value="">— Select —</option>
+              <option value="T1a">T1a (≤1 cm, confined to thyroid)</option>
+              <option value="T1b">T1b (>1 cm, ≤2 cm, confined)</option>
+              <option value="T2">T2 (>2 cm, ≤4 cm, confined)</option>
+              <option value="T3a">T3a (>4 cm, confined to thyroid)</option>
+              <option value="T3b">T3b (gross ETE into strap muscles, any size)</option>
+              <option value="T4a">T4a (gross ETE into major structures)</option>
+              <option value="T4b">T4b (gross ETE into prevertebral fascia / encasing vessels)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Extrathyroidal Extension (ETE)</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'ete','none')">None</button>
+            <button class="toggle-btn" onclick="toggle(this,'ete','microscopic')">Microscopic (minimal)</button>
+            <button class="toggle-btn" onclick="toggle(this,'ete','strap')">Strap muscle invasion</button>
+            <button class="toggle-btn" onclick="toggle(this,'ete','gross')">Gross ETE (T4a/T4b)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Tumor Focality</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'focality','unifocal')">Unifocal</button>
+            <button class="toggle-btn" onclick="toggle(this,'focality','multifocal-uni')">Multifocal (unilateral)</button>
+            <button class="toggle-btn" onclick="toggle(this,'focality','multifocal-bi')">Multifocal (bilateral)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Vascular / Lymphovascular Invasion</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'vascular','none')">None</button>
+            <button class="toggle-btn" onclick="toggle(this,'vascular','focal')">Focal (&lt;4 vessels)</button>
+            <button class="toggle-btn" onclick="toggle(this,'vascular','extensive')">Extensive (≥4 vessels)</button>
+          </div>
+          <div class="info-box" id="vasNote" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Surgical Details</div>
+        <div class="field">
+          <label>Extent of Surgery <span class="required-asterisk">*</span></label>
+          <select id="surgery">
+            <option value="">— Select —</option>
+            <option value="total">Total / Near-Total Thyroidectomy</option>
+            <option value="lobectomy">Thyroid Lobectomy / Hemithyroidectomy</option>
+            <option value="completion">Completion Thyroidectomy</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Surgical Margin Status</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'margin','R0')">R0 (clear margins)</button>
+            <button class="toggle-btn" onclick="toggle(this,'margin','R1-ant')">R1 – microscopic +ve, anterior</button>
+            <button class="toggle-btn" onclick="toggle(this,'margin','R1-post')">R1 – microscopic +ve, posterior</button>
+            <button class="toggle-btn" onclick="toggle(this,'margin','R2')">R2 (gross residual disease)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Lymph Node Status</div>
+        <div class="field">
+          <label>N Category (AJCC 8th Ed)</label>
+          <select id="nCategory">
+            <option value="N0">N0 / N0a / N0b — No nodal metastasis</option>
+            <option value="N1a">N1a — Central neck (Level VI/VII) metastasis</option>
+            <option value="N1b">N1b — Lateral neck metastasis</option>
+          </select>
+        </div>
+
+        <div id="node-details" class="hidden">
+          <div class="grid-3">
+            <div class="field">
+              <label>Number of Positive Nodes</label>
+              <input type="number" id="posNodes" min="0" max="200" placeholder="e.g. 3">
+            </div>
+            <div class="field">
+              <label>Total Nodes Examined</label>
+              <input type="number" id="totalNodes" min="0" max="200" placeholder="e.g. 12">
+            </div>
+            <div class="field">
+              <label>Largest Metastatic Node (cm)</label>
+              <input type="number" id="nodeSize" step="0.1" min="0" max="20" placeholder="e.g. 1.5">
+            </div>
+          </div>
+          <div class="field">
+            <label>Extranodal Extension (ENE)</label>
+            <div class="toggle-group">
+              <button class="toggle-btn" onclick="toggle(this,'ene','no')">No ENE</button>
+              <button class="toggle-btn" onclick="toggle(this,'ene','micro')">Micro ENE</button>
+              <button class="toggle-btn" onclick="toggle(this,'ene','macro')">Macro ENE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Distant Metastasis (M)</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active" onclick="toggle(this,'mstatus','M0')" id="m0btn">M0</button>
+            <button class="toggle-btn" onclick="toggle(this,'mstatus','M1')">M1 (Distant metastasis present)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="goStep(2)">Next: Histopathology Details →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Histopathology Details -->
+    <div class="step-section" id="step2">
+      <div class="step-label">Step 2 of 5</div>
+      <div class="step-title">Histopathological Details</div>
+
+      <div class="card">
+        <div class="card-header">Tumor Aggressiveness Features</div>
+        <div class="field">
+          <label>Histological Aggressiveness (tick all that apply)</label>
+          <div class="toggle-group" style="flex-direction:column; align-items:flex-start; gap:8px;">
+            <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="poorlyDiff" style="accent-color:var(--accent);"> Poorly differentiated / high grade features
+            </label>
+            <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="aggressHisto" style="accent-color:var(--accent);"> Aggressive histological subtype (tall cell, columnar, diffuse sclerosing, hobnail, solid/trabecular)
+            </label>
+            <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="widelyInvasive" style="accent-color:var(--accent);"> Widely invasive OTC (≥4 foci of capsular invasion with ETE, or ≥4 vessels)
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Encapsulated Angioinvasion (applies to FTC/OTC)</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'angioinv','NA')">N/A (PTC)</button>
+            <button class="toggle-btn" onclick="toggle(this,'angioinv','none')">None / Capsular only</button>
+            <button class="toggle-btn" onclick="toggle(this,'angioinv','limited')">Limited vascular invasion (&lt;4 vessels)</button>
+            <button class="toggle-btn" onclick="toggle(this,'angioinv','extensive')">Extensive vascular invasion (≥4 vessels)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Molecular / Somatic Genomics (if available)</label>
+          <div class="toggle-group" style="flex-direction:column; align-items:flex-start; gap:8px;">
+            <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="brafTert" style="accent-color:var(--accent);"> BRAF V600E + TERT promoter co-mutation
+            </label>
+            <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="rasTert" style="accent-color:var(--accent);"> RAS + TERT promoter co-mutation
+            </label>
+          </div>
+          <div class="info-box">
+            <b>Note:</b> Molecular data supplement but do not replace ATA Risk of Recurrence categories. Co-mutations significantly increase recurrence risk (HR 6–15x). Include in clinical interpretation.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Patient Demographics</div>
+        <div class="grid-2">
+          <div class="field">
+            <label>Age at Diagnosis (years) <span class="required-asterisk">*</span></label>
+            <input type="number" id="patientAge" min="18" max="100" placeholder="e.g. 48">
+          </div>
+          <div class="field">
+            <label>Sex</label>
+            <select id="patientSex">
+              <option value="">— Select —</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </div>
+        </div>
+        <div class="info-box">
+          Age ≥55 years triggers AJCC 8th Ed Stage II (any T, any N, M0). Age is not an independent ATA Risk of Recurrence predictor, but age ≥55 is associated with worse response in intermediate/high-risk disease.
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+        <button class="btn btn-primary" onclick="goStep(3)">Next: Post-op Imaging →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Post-op Imaging -->
+    <div class="step-section" id="step3">
+      <div class="step-label">Step 3 of 5</div>
+      <div class="step-title">Pre-operative Imaging & Post-operative Imaging</div>
+
+      <div class="card">
+        <div class="card-header">Pre-operative Imaging Findings</div>
+        <div class="field">
+          <label>Pre-op Neck Ultrasound</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'preUSG','done-clear')">Done — No suspicious nodes</button>
+            <button class="toggle-btn" onclick="toggle(this,'preUSG','done-suspicious')">Done — Suspicious lateral/central nodes</button>
+            <button class="toggle-btn" onclick="toggle(this,'preUSG','not-done')">Not performed</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Pre-op CT Neck/Chest</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'preCT','done-clear')">Done — No distant metastasis</button>
+            <button class="toggle-btn" onclick="toggle(this,'preCT','done-mets')">Done — Distant metastasis identified</button>
+            <button class="toggle-btn" onclick="toggle(this,'preCT','not-done')">Not performed</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Post-operative Imaging (6–12 weeks after surgery)</div>
+        <div class="field">
+          <label>Post-op Neck Ultrasound Status <span class="required-asterisk">*</span></label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'postUSG','negative')">No suspicious findings</button>
+            <button class="toggle-btn" onclick="toggle(this,'postUSG','nonspecific')">Nonspecific / indeterminate findings</button>
+            <button class="toggle-btn" onclick="toggle(this,'postUSG','suspicious')">Suspicious for residual/recurrent disease</button>
+            <button class="toggle-btn" onclick="toggle(this,'postUSG','not-done')">Not yet done</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Post-op RAI Whole Body Scan (WBS)</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','not-done')">Not performed / Not planned</button>
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','thyroid-bed-only')">Uptake in thyroid bed only</button>
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','outside-bed')">Uptake outside thyroid bed (neck nodes)</button>
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','distant-uptake')">Distant uptake (chest/bone/other)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>RAI Administered Post-operatively?</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'raiGiven','no')">No RAI given</button>
+            <button class="toggle-btn" onclick="toggle(this,'raiGiven','ablation')">Yes — Remnant ablation (30–50 mCi)</button>
+            <button class="toggle-btn" onclick="toggle(this,'raiGiven','adjuvant')">Yes — Adjuvant therapy (50–150 mCi)</button>
+            <button class="toggle-btn" onclick="toggle(this,'raiGiven','therapeutic')">Yes — Therapeutic (≥100–200 mCi, known disease)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+        <button class="btn btn-primary" onclick="goStep(4)">Next: Biochemistry →</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: Biochemistry -->
+    <div class="step-section" id="step4">
+      <div class="step-label">Step 4 of 5</div>
+      <div class="step-title">Serum Thyroglobulin & Antibodies</div>
+
+      <div class="card">
+        <div class="card-header">Post-operative Biochemistry (6–12 weeks after surgery)</div>
+
+        <div class="field">
+          <label>Tg Assay Context</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'tgContext','on-LT4')">Non-stimulated (on LT4)</button>
+            <button class="toggle-btn" onclick="toggle(this,'tgContext','stimulated')">Stimulated (after TSH stimulation)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Serum Thyroglobulin (Tg) Value (ng/mL)</label>
+          <input type="number" id="tgValue" step="0.01" min="0" placeholder="e.g. 0.15">
+          <div class="info-box">
+            <b>Reference:</b> Assay sensitivity should be ≤0.1 ng/mL. If TgAb positive, Tg is unreliable (may be falsely low).
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Anti-Thyroglobulin Antibodies (TgAb)</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'tgab','negative')">Negative / Undetectable</button>
+            <button class="toggle-btn" onclick="toggle(this,'tgab','stable-declining')">Positive — Stable or Declining</button>
+            <button class="toggle-btn" onclick="toggle(this,'tgab','rising')">Positive — Rising</button>
+          </div>
+        </div>
+
+        <div class="tg-tgab-note">
+          <b>Interpretation note:</b> Rising TgAb is a surrogate for biochemically incomplete response even in the absence of localizable disease. Stable/declining TgAb may represent indeterminate response. Positive TgAb makes Tg measurement unreliable.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Current TSH Status</div>
+        <div class="field">
+          <label>Current Serum TSH (mIU/L)</label>
+          <input type="number" id="tshValue" step="0.01" min="0" placeholder="e.g. 0.8">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+        <button class="btn btn-primary" onclick="goStep(5)">Next: Clinical Context →</button>
+      </div>
+    </div>
+
+    <!-- STEP 5: Clinical Context -->
+    <div class="step-section" id="step5">
+      <div class="step-label">Step 5 of 5</div>
+      <div class="step-title">Clinical Context & Comorbidities</div>
+
+      <div class="card">
+        <div class="card-header">Time Since Surgery</div>
+        <div class="field">
+          <label>Time elapsed since primary surgery</label>
+          <select id="timeSurgery">
+            <option value="lt3m">Less than 3 months (immediate post-op)</option>
+            <option value="3to12m">3–12 months</option>
+            <option value="1to2y">1–2 years</option>
+            <option value="2to5y">2–5 years</option>
+            <option value="gt5y">More than 5 years</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Comorbidities Relevant to TSH Suppression</div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">Select all that apply — these influence TSH target decisions:</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="aFib" style="accent-color:var(--accent);"> Atrial fibrillation / cardiac arrhythmia
+          </label>
+          <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="osteoporosis" style="accent-color:var(--accent);"> Osteoporosis / significant fracture risk (especially postmenopausal women)
+          </label>
+          <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="ischemicHD" style="accent-color:var(--accent);"> Ischemic heart disease / angina
+          </label>
+          <label style="display:flex; gap:10px; align-items:center; color:var(--text-muted); font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="elderly" style="accent-color:var(--accent);"> Age ≥65 years
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Additional Clinical Context</div>
+        <div class="field">
+          <label>Any prior structural recurrence or re-operation?</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'priorRecurrence','no')">No</button>
+            <button class="toggle-btn" onclick="toggle(this,'priorRecurrence','yes')">Yes</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Patient anxiety / preference for intensive follow-up?</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" onclick="toggle(this,'patientPref','standard')">Standard monitoring acceptable</button>
+            <button class="toggle-btn" onclick="toggle(this,'patientPref','intensive')">Patient prefers intensive monitoring</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(4)">← Back</button>
+        <button class="btn btn-primary" onclick="generateReport()">🔍 Generate Risk Assessment</button>
+      </div>
+    </div>
+
+  </div><!-- /form-section -->
+
+  <!-- RESULT SECTION -->
+  <div id="result-section">
+
+    <div id="resultBanner" class="result-banner">
+      <div class="risk-label">ATA 2025 — Risk of Structural Recurrence</div>
+      <div class="risk-title" id="riskTitle">—</div>
+      <div class="risk-sub" id="riskSub">—</div>
+    </div>
+
+    <div class="result-grid">
+      <div class="result-card">
+        <div class="rc-label">AJCC 8th Ed Stage</div>
+        <div class="rc-value" id="ajccStage">—</div>
+        <div class="rc-detail" id="ajccDetail">—</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Response to Initial Therapy</div>
+        <div class="rc-value" id="responseCategory">—</div>
+        <div class="rc-detail" id="responseDetail">—</div>
+      </div>
+    </div>
+
+    <div id="resultContent"></div>
+
+    <div class="btn-row" style="justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <button class="btn btn-reset" onclick="resetAll()">↺ Start New Assessment</button>
+      <button class="btn btn-primary" onclick="goStep(1); document.getElementById('result-section').style.display='none'; document.getElementById('form-section').style.display='block'; document.getElementById('progressBar').style.display='flex';">✏️ Edit Inputs</button>
+    </div>
+
+  </div><!-- /result-section -->
+
+</div><!-- /wrapper -->
+
+<script>
+// ========== STATE ==========
+let state = {
+  ete: null, focality: null, vascular: null, margin: null, mstatus: 'M0',
+  ene: null, tgContext: null, tgab: null, raiGiven: null, postUSG: null,
+  postWBS: null, preUSG: null, preCT: null, angioinv: null, priorRecurrence: null,
+  patientPref: null
+};
+
+function toggle(el, key, value) {
+  document.querySelectorAll('[onclick*="toggle(this,\'' + key + '\'"]').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  state[key] = value;
+
+  // Show node details
+  if (key === 'nCategory' && false) {} // handled by select change below
+
+  // Show vascular note
+  if (key === 'vascular') {
+    const note = document.getElementById('vasNote');
+    if (value === 'extensive') {
+      note.style.display = 'block';
+      note.innerHTML = '<b>High risk:</b> Extensive vascular invasion (≥4 vessels) is associated with significantly increased risk of distant metastasis (HR 8.03) and classifies as HIGH risk category in FTC/OTC.';
+    } else if (value === 'focal') {
+      note.style.display = 'block';
+      note.innerHTML = '<b>Intermediate-High:</b> Focal vascular invasion (&lt;4 vessels) is associated with increased risk of distant metastasis (HR 2.5) and is a low-intermediate to intermediate-high risk feature.';
+    } else { note.style.display = 'none'; }
+  }
+}
+
+// Node details show/hide
+document.getElementById('nCategory').addEventListener('change', function() {
+  const nd = document.getElementById('node-details');
+  if (this.value === 'N0') nd.classList.add('hidden');
+  else nd.classList.remove('hidden');
+});
+
+// Init M0
+document.getElementById('m0btn').classList.add('active');
+
+// ========== NAVIGATION ==========
+let currentStep = 1;
+const totalSteps = 5;
+
+function goStep(n) {
+  document.getElementById('step' + currentStep).classList.remove('active');
+  document.getElementById('step' + n).classList.add('active');
+  currentStep = n;
+  updateProgress();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateProgress() {
+  for (let i = 1; i <= totalSteps; i++) {
+    const el = document.getElementById('ps' + i);
+    el.className = 'progress-step';
+    if (i < currentStep) el.classList.add('done');
+    else if (i === currentStep) el.classList.add('active');
+  }
+}
+
+// ========== AJCC STAGING ==========
+function getAJCCStage(T, N, M, age) {
+  if (M === 'M1') {
+    return age < 55 ? { stage: 'Stage II', detail: 'Any T, Any N, M1 — Age <55' }
+                    : { stage: 'Stage IVB', detail: 'Any T, Any N, M1 — Age ≥55' };
+  }
+  if (age < 55) {
+    // All M0 is Stage I for <55
+    if (N === 'N0') return { stage: 'Stage I', detail: 'Age <55, M0' };
+    return { stage: 'Stage I', detail: 'Age <55, Any N, M0 — N1 does not upstage in 8th Ed' };
+  } else {
+    // ≥55
+    if (['T1a','T1b','T2'].includes(T) && N === 'N0') return { stage: 'Stage I', detail: 'Age ≥55, T1-T2, N0, M0' };
+    if (['T1a','T1b','T2'].includes(T) && N !== 'N0') return { stage: 'Stage II', detail: 'Age ≥55, T1-T2, N1, M0' };
+    if (['T3a','T3b'].includes(T)) return { stage: 'Stage II', detail: 'Age ≥55, T3a/T3b, Any N, M0' };
+    if (T === 'T4a') return { stage: 'Stage III', detail: 'Age ≥55, T4a, Any N, M0' };
+    if (T === 'T4b') return { stage: 'Stage IVA', detail: 'Age ≥55, T4b, Any N, M0' };
+  }
+  return { stage: 'Stage I', detail: '—' };
+}
+
+// ========== RISK STRATIFICATION ==========
+function calcRisk() {
+  const histo = document.getElementById('histology').value;
+  const T = document.getElementById('tCategory').value;
+  const N = document.getElementById('nCategory').value;
+  const M = state.mstatus || 'M0';
+  const ete = state.ete;
+  const vascular = state.vascular;
+  const margin = state.margin;
+  const ene = state.ene;
+  const poorlyDiff = document.getElementById('poorlyDiff').checked;
+  const aggressHisto = document.getElementById('aggressHisto').checked;
+  const widelyInvasive = document.getElementById('widelyInvasive').checked;
+  const angioinv = state.angioinv;
+  const brafTert = document.getElementById('brafTert').checked;
+  const rasTert = document.getElementById('rasTert').checked;
+  const focality = state.focality;
+  const posNodes = parseInt(document.getElementById('posNodes').value) || 0;
+  const nodeSize = parseFloat(document.getElementById('nodeSize').value) || 0;
+  const surgery = document.getElementById('surgery').value;
+
+  let risk = 'low'; // low, low-int, int-high, high
+  let reasons = [];
+
+  // ========= HIGH RISK FEATURES =========
+  if (M === 'M1') { risk = 'high'; reasons.push('Distant metastasis (M1) — HIGH risk'); }
+  if (['T4a','T4b'].includes(T)) { risk = 'high'; reasons.push('Gross extrathyroidal extension — T4 (HIGH risk)'); }
+  if (ete === 'gross') { risk = 'high'; reasons.push('Gross ETE into major structures'); }
+  if (margin === 'R2') { risk = 'high'; reasons.push('Gross residual disease (R2 resection)'); }
+  if (poorlyDiff) { risk = 'high'; reasons.push('Poorly differentiated / high grade features'); }
+  if (N !== 'N0' && nodeSize >= 3) { risk = 'high'; reasons.push('Metastatic lymph node ≥3 cm (cN1 ≥3 cm)'); }
+  if (N !== 'N0' && ene === 'macro' && posNodes >= 3) { risk = 'high'; reasons.push('Macroscopic extranodal extension with >3 positive nodes (~40% recurrence risk)'); }
+  if (widelyInvasive) { risk = 'high'; reasons.push('Widely invasive OTC (≥4 vessels or ≥4 foci capsular invasion with ETE)'); }
+  if (angioinv === 'extensive') {
+    if (risk !== 'high') risk = 'high';
+    reasons.push('Extensive vascular invasion (≥4 vessels) — HIGH risk in FTC/OTC');
+  }
+  if (T === 'T3a' && (ete === 'microscopic' || ete === 'strap')) { if (maxRisk(risk,'int-high') === 'high') {} else { if(risk!=='high') {risk='high'; reasons.push('T3a + ETE');} } }
+
+  // ========= INTERMEDIATE-HIGH RISK ==========
+  if (risk !== 'high') {
+    let intHigh = false;
+    if (['T1a','T1b','T2','T3a'].includes(T) && N === 'N1b' && nodeSize > 0 && nodeSize < 3) { intHigh = true; reasons.push('Clinically evident lateral LN metastasis <3 cm'); }
+    if (N !== 'N0' && posNodes >= 3 && nodeSize < 3) { intHigh = true; reasons.push('Multiple nodal metastases (≥3 nodes)'); }
+    if (vascular === 'extensive') { intHigh = true; reasons.push('Extensive vascular invasion (≥4 vessels) — intermediate-high risk in PTC'); }
+    if (aggressHisto) { intHigh = true; reasons.push('Aggressive histological subtype (tall cell, columnar, diffuse sclerosing, hobnail, solid)'); }
+    if (brafTert || rasTert) { intHigh = true; reasons.push('High-risk co-mutation (' + (brafTert?'BRAF V600E + TERT':'') + (rasTert?'RAS + TERT':'') + ') — significantly elevated recurrence risk'); }
+    if (N !== 'N0' && ene !== null && ene !== 'no') { intHigh = true; reasons.push('Extranodal extension in metastatic nodes'); }
+    if (margin === 'R1-post') { intHigh = true; reasons.push('Microscopically positive posterior margin (independent risk factor for recurrence)'); }
+    // T3a + multiple intermediate factors
+    if (T === 'T3a') { intHigh = true; reasons.push('T3a (>4 cm, intrathyroidal) — intermediate-high category'); }
+    if (intHigh) risk = 'int-high';
+  }
+
+  // ========= LOW-INTERMEDIATE RISK =========
+  if (risk === 'low') {
+    let lowInt = false;
+    if (T === 'T3a' && N === 'N0' && ete === 'none') { lowInt = true; reasons.push('T3a intrathyroidal (some intermediate features)'); }
+    if (ete === 'strap') { lowInt = true; reasons.push('Strap muscle invasion (extrathyroidal extension into strap muscles)'); }
+    if (ete === 'microscopic') { lowInt = true; reasons.push('Microscopic ETE (minimal extrathyroidal extension) — low-intermediate'); }
+    if (N === 'N1a' && posNodes <= 5 && nodeSize < 2) { lowInt = true; reasons.push('Central neck micrometastases (≤5 nodes, <2 mm) — low-intermediate'); }
+    if (N === 'N1b' && posNodes <= 2 && nodeSize < 2) { lowInt = true; reasons.push('Limited lateral neck micrometastases'); }
+    if (vascular === 'focal') { lowInt = true; reasons.push('Focal lymphovascular invasion (<4 vessels)'); }
+    if (focality === 'multifocal-bi') { lowInt = true; reasons.push('Bilateral multifocal disease'); }
+    if (margin === 'R1-ant') { lowInt = true; reasons.push('Microscopically positive anterior margin'); }
+    if (histo === 'FTC-minimally') { lowInt = true; reasons.push('Minimally invasive FTC — capsular invasion only (consider low-intermediate)'); }
+    if (angioinv === 'limited') { lowInt = true; reasons.push('Limited vascular invasion (<4 vessels) in FTC/OTC — low-intermediate'); }
+    // Unilateral multifocality
+    if (focality === 'multifocal-uni' && N === 'N0') { lowInt = true; reasons.push('Unilateral multifocal disease'); }
+    if (lowInt) risk = 'low-int';
+  }
+
+  // ========= LOW RISK =========
+  if (risk === 'low') {
+    if (['T1a','T1b','T2'].includes(T) && N === 'N0' && M === 'M0' && !ete && vascular !== 'extensive' && !poorlyDiff) {
+      reasons.push('Intrathyroidal T1-T2, N0, M0 — LOW risk');
+    }
+    if (histo === 'FVPTC-encapsulated') { reasons.push('Encapsulated IEFVPTC — low risk category'); }
+    if (N === 'N1a' && posNodes > 0 && posNodes <= 5 && nodeSize < 0.2) { reasons.push('Up to 5 central micrometastases <2 mm — may remain LOW risk'); }
+  }
+
+  // Low-intermediate fallback for aggressive histology in T1-T2
+  if (risk === 'low' && (aggressHisto || histo === 'PTC-TCV' || histo === 'PTC-columnar')) {
+    risk = 'int-high';
+    reasons.push('Aggressive PTC subtype upgrades to intermediate-high minimum');
+  }
+
+  return { risk, reasons };
+}
+
+function maxRisk(a, b) {
+  const order = ['low','low-int','int-high','high'];
+  return order.indexOf(a) >= order.indexOf(b) ? a : b;
+}
+
+// ========== RESPONSE CATEGORY ==========
+function calcResponse() {
+  const surgery = document.getElementById('surgery').value;
+  const raiGiven = state.raiGiven;
+  const postUSG = state.postUSG;
+  const tgVal = parseFloat(document.getElementById('tgValue').value);
+  const tgab = state.tgab;
+  const tgContext = state.tgContext;
+  const postWBS = state.postWBS;
+
+  if (isNaN(tgVal) && !tgab) return { cat: 'unknown', label: 'Insufficient data', detail: 'Please enter Tg and TgAb values' };
+
+  // Structural incomplete — always overrides
+  if (postUSG === 'suspicious' || postWBS === 'outside-bed' || postWBS === 'distant-uptake') {
+    return { cat: 'structural', label: 'Structurally Incomplete', detail: 'Structural evidence of persistent disease (suspicious imaging or uptake outside thyroid bed)' };
+  }
+
+  // Biochemically incomplete
+  if (tgab === 'rising') {
+    return { cat: 'biochem', label: 'Biochemically Incomplete', detail: 'Rising TgAb — surrogate for biochemically incomplete response' };
+  }
+
+  // Determine thresholds based on surgery + RAI
+  let excellentThresh_nonStim, excellentThresh_stim, indetermThresh_upper;
+  let category = 'unknown';
+  let label = '—', detail = '';
+
+  if (surgery === 'lobectomy') {
+    // Hemithyroidectomy
+    if (!isNaN(tgVal)) {
+      if (postUSG === 'negative' && tgVal < 30) { // Tg will be detectable normally
+        category = 'excellent';
+        label = 'Excellent (Lobectomy)';
+        detail = 'Normal/low-risk contralateral lobe, TSH within normal range — per Table 9';
+      } else {
+        category = 'indeterminate';
+        label = 'Indeterminate (Lobectomy)';
+        detail = 'Further monitoring required. Specific Tg cutoffs uncertain for lobectomy.';
+      }
+    }
+  } else {
+    // Total thyroidectomy
+    const withRAI = raiGiven && raiGiven !== 'no';
+    if (withRAI) {
+      // Post TT + RAI
+      if (!isNaN(tgVal)) {
+        if ((tgContext === 'on-LT4' && tgVal < 0.2 && tgab !== 'rising' && tgab !== 'stable-declining' && postUSG !== 'suspicious') ||
+            (tgContext === 'stimulated' && tgVal < 1 && tgab !== 'rising' && postUSG !== 'suspicious')) {
+          category = 'excellent'; label = 'Excellent Response';
+          detail = (tgContext === 'on-LT4' ? 'Nonstimulated Tg <0.2 ng/mL' : 'Stimulated Tg <1 ng/mL') + ', negative imaging, undetectable TgAb';
+        } else if ((tgContext === 'on-LT4' && tgVal >= 0.2 && tgVal <= 1) ||
+                   (tgContext === 'stimulated' && tgVal >= 1 && tgVal <= 10) ||
+                   tgab === 'stable-declining' || postUSG === 'nonspecific') {
+          category = 'indeterminate'; label = 'Indeterminate Response';
+          detail = 'Nonspecific biochemical or structural findings — cannot classify as benign or malignant. Continue monitoring.';
+        } else if ((tgContext === 'on-LT4' && tgVal > 1) || (tgContext === 'stimulated' && tgVal > 10)) {
+          category = 'biochem'; label = 'Biochemically Incomplete';
+          detail = 'Elevated Tg (' + (tgContext==='on-LT4'?'nonstim >1':'stimulated >10') + ' ng/mL) with negative imaging — consider further evaluation';
+        }
+      }
+    } else {
+      // Post TT without RAI
+      if (!isNaN(tgVal)) {
+        if (tgVal < 2.5 && tgab !== 'rising' && postUSG !== 'suspicious') {
+          category = 'excellent'; label = 'Excellent Response';
+          detail = 'Nonstimulated Tg <2.5 ng/mL (post-TT without RAI), negative imaging — per Table 9';
+        } else if ((tgVal >= 2.5 && tgVal <= 5) || tgab === 'stable-declining' || postUSG === 'nonspecific') {
+          category = 'indeterminate'; label = 'Indeterminate Response';
+          detail = 'Nonstimulated Tg 2.5–5 ng/mL or stable/declining TgAb — continue monitoring';
+        } else if (tgVal > 5) {
+          category = 'biochem'; label = 'Biochemically Incomplete';
+          detail = 'Nonstimulated Tg >5 ng/mL (post-TT without RAI) with negative imaging';
+        }
+      }
+    }
+  }
+
+  return { cat: category, label, detail };
+}
+
+// ========== TSH TARGET ==========
+// ATA 2025 TSH logic integrates THREE inputs (Rec 45 + Rec 46 + Table 9):
+//   1. Response category (Table 9) — primary driver
+//   2. Initial risk of recurrence (Rec 45, 46) — overlaid on response
+//   3. Time since surgery — for high-risk excellent responders, liberalize over time
+//   4. Comorbidities — modulate degree of suppression (Table 9 footnote c)
+//
+// Key guideline statements:
+//   Rec 45: "patients with high-risk disease MAY BE MORE LIKELY TO BENEFIT from a TSH
+//            in the subnormal range than those with low-risk disease"
+//   Rec 46A: "Long-term TSH suppression NOT suggested for low- or intermediate-risk
+//             disease with no evidence of biochemical or structural recurrence"
+//   Rec 46B: "Risks vs benefits of TSH suppression should be re-evaluated over time"
+//   Table 9 footnote b (Indeterminate): "data inconclusive; if progression develops,
+//             subnormal may be reasonable"
+//   Table 9 footnote c (Incomplete): "TSH below normal; comorbidities must be factored in"
+
+function getTSHTarget(risk, response, comorbidities, timeSurgery) {
+  const hasComorbid = comorbidities.aFib || comorbidities.osteoporosis || comorbidities.ischemicHD || comorbidities.elderly;
+  const comorbidList = [
+    comorbidities.aFib ? 'atrial fibrillation' : '',
+    comorbidities.osteoporosis ? 'osteoporosis' : '',
+    comorbidities.ischemicHD ? 'ischemic heart disease' : '',
+    comorbidities.elderly ? 'age ≥65' : ''
+  ].filter(Boolean).join(', ');
+
+  const earlyPostOp = timeSurgery === 'lt3m' || timeSurgery === '3to12m';
+  const sustained = timeSurgery === '2to5y' || timeSurgery === 'gt5y';
+
+  // ── EXCELLENT RESPONSE ──────────────────────────────────────────────────────
+  if (response.cat === 'excellent') {
+
+    if (risk === 'low' || risk === 'low-int') {
+      return {
+        target: 'TSH within normal reference range (0.5–2.0 mIU/L)',
+        rationale: 'Excellent response + low/low-intermediate initial risk — Table 9 specifies normal reference range. Rec 46A explicitly states long-term TSH suppression is NOT suggested for low- or intermediate-risk disease with no evidence of recurrence. No benefit of suppression outweighs its risks in this group.',
+        strength: 'Table 9 + Rec 46A, ATA 2025 — Conditional recommendation, Low certainty evidence'
+      };
+    }
+
+    if (risk === 'int-high') {
+      if (sustained && !hasComorbid) {
+        return {
+          target: 'TSH within normal reference range (0.5–2.0 mIU/L)',
+          rationale: 'Excellent response sustained >2 years + intermediate-high initial risk — Rec 46A advises against long-term suppression once excellent response is confirmed. Rec 46B: risks vs benefits should be re-evaluated over time; liberalization to normal range is appropriate with sustained excellent biochemical response.',
+          strength: 'Table 9 + Rec 46A/46B, ATA 2025 — Conditional recommendation, Low certainty evidence'
+        };
+      }
+      const comorbNote = hasComorbid
+        ? ` ⚠️ Comorbidities present (${comorbidList}) — limit depth of suppression; target the higher end of mildly subnormal or low-normal range.`
+        : ' Re-evaluate at each visit; liberalize toward normal range as excellent response is sustained over time (Rec 46B).';
+      return {
+        target: 'Mildly subnormal TSH (0.1–0.5 mIU/L) initially → liberalize to normal range over time',
+        rationale: 'Excellent response + intermediate-high initial risk — Rec 45 states high-risk disease may benefit more from subnormal TSH. Even with excellent response, early post-operative period warrants mildly subnormal TSH given >16–30% baseline recurrence risk. Rec 46B mandates re-evaluation over time with goal of liberalizing toward normal range as response is sustained.' + comorbNote,
+        strength: 'Table 9 + Rec 45 + Rec 46B, ATA 2025 — Conditional recommendation, Low certainty evidence'
+      };
+    }
+
+    if (risk === 'high') {
+      if (sustained && !hasComorbid) {
+        return {
+          target: 'Mildly subnormal TSH (0.1–0.5 mIU/L) → consider liberalizing toward low-normal',
+          rationale: 'Excellent response sustained >2 years + high initial risk (>30% recurrence) — Rec 45 supports subnormal TSH in high-risk disease. Even with excellent response, given the high baseline risk, maintain mildly subnormal TSH longer than intermediate-risk. Rec 46B: re-evaluate periodically; if response remains excellent at 5+ years, cautious liberalization toward low-normal range is reasonable.',
+          strength: 'Table 9 + Rec 45 + Rec 46B, ATA 2025 — Conditional recommendation, Low certainty evidence'
+        };
+      }
+      if (sustained && hasComorbid) {
+        return {
+          target: 'Low-normal TSH (0.5–1.0 mIU/L)',
+          rationale: `Excellent response sustained >2 years + high initial risk + comorbidities (${comorbidList}) — sustained excellent response supports liberalization, but comorbidities preclude even mild suppression. Target low-normal range as the safest balance. Rec 46B: risks vs benefits must be re-evaluated regularly.`,
+          strength: 'Table 9 + Rec 45 + Rec 46B, ATA 2025 — Conditional recommendation, Low certainty evidence'
+        };
+      }
+      const comorbNote = hasComorbid
+        ? ` ⚠️ Comorbidities (${comorbidList}) limit depth of suppression — target mildly subnormal (0.1–0.5 mIU/L) rather than deeply suppressed TSH.`
+        : ' Target subnormal TSH in early post-operative period; reassess at each follow-up.';
+      return {
+        target: 'Subnormal TSH (<0.5 mIU/L); ideally 0.1–0.5 mIU/L',
+        rationale: 'Excellent response + high initial risk (>30% recurrence) — Rec 45 explicitly states high-risk disease may benefit more from subnormal TSH. Despite excellent biochemical response, the high baseline recurrence risk justifies subnormal TSH early in follow-up. Rec 46B: re-evaluate over time; liberalize if sustained excellent response confirmed at 2+ years.' + comorbNote,
+        strength: 'Table 9 + Rec 45, ATA 2025 — Conditional recommendation, Low certainty evidence'
+      };
+    }
+  }
+
+  // ── INDETERMINATE RESPONSE ──────────────────────────────────────────────────
+  if (response.cat === 'indeterminate') {
+
+    if (risk === 'low' || risk === 'low-int') {
+      return {
+        target: 'TSH within normal reference range (0.5–2.0 mIU/L)',
+        rationale: 'Indeterminate response + low/low-intermediate risk — Table 9 specifies normal reference range (footnote b: data inconclusive). Rec 46A: suppression not suggested in low/intermediate risk without recurrence evidence. Re-classify response at 6–12 months; only if progression documented should subnormal TSH be considered.',
+        strength: 'Table 9 footnote b + Rec 46A, ATA 2025 — Data inconclusive'
+      };
+    }
+
+    if (risk === 'int-high' || risk === 'high') {
+      const comorbNote = hasComorbid
+        ? ` ⚠️ Comorbidities (${comorbidList}): limit to mildly subnormal or low-normal end.`
+        : ' If progression is documented at follow-up, deepen suppression to clearly subnormal range.';
+      return {
+        target: 'Mildly subnormal TSH (0.1–0.5 mIU/L)',
+        rationale: 'Indeterminate response + intermediate-high/high initial risk — Table 9 specifies normal range (footnote b) as the base, but Rec 45 states high-risk disease may benefit from subnormal TSH. With unresolved response status and a high baseline recurrence risk, mildly subnormal TSH is the pragmatic balance. Table 9 footnote b: if progression develops, subnormal range is explicitly reasonable. Re-classify response at 6–12 months.' + comorbNote,
+        strength: 'Table 9 footnote b + Rec 45, ATA 2025 — Individualize; data inconclusive'
+      };
+    }
+  }
+
+  // ── BIOCHEMICALLY INCOMPLETE ────────────────────────────────────────────────
+  if (response.cat === 'biochem') {
+    if (hasComorbid) {
+      return {
+        target: 'TSH below normal reference range — degree individualized given comorbidities',
+        rationale: `Biochemically incomplete response — Table 9 footnote c mandates TSH below normal reference range. However, comorbidities (${comorbidList}) must be factored into the decision. Target the minimum degree of suppression consistent with disease control — practically 0.1–0.5 mIU/L rather than deeply suppressed (<0.1 mIU/L). Reassess TSH target at every visit as response category may change.`,
+        strength: 'Table 9 footnote c, ATA 2025 — Conditional recommendation, Low certainty evidence (Rec 45)'
+      };
+    }
+    return {
+      target: 'TSH below normal reference range (target ~0.1–0.5 mIU/L; <0.1 mIU/L if rapidly progressive)',
+      rationale: 'Biochemically incomplete response — Table 9 footnote c specifies TSH below normal reference range. Rec 45: high-risk disease benefits more from subnormal TSH. Degree of suppression should reflect rate of Tg rise and disease trajectory — deeper suppression (<0.1 mIU/L) for rapidly rising Tg or high-risk histology; mildly subnormal (0.1–0.5 mIU/L) if Tg is stable or rising slowly. Reassess at every follow-up.',
+      strength: 'Table 9 footnote c + Rec 45, ATA 2025 — Conditional recommendation, Low certainty evidence'
+    };
+  }
+
+  // ── STRUCTURALLY INCOMPLETE ─────────────────────────────────────────────────
+  if (response.cat === 'structural') {
+    if (hasComorbid) {
+      return {
+        target: 'TSH below normal reference range — degree individualized given comorbidities',
+        rationale: `Structurally incomplete response — Table 9 footnote c mandates TSH below normal reference range. Active structural disease warrants suppression, but comorbidities (${comorbidList}) must be factored in. Aim for mildly subnormal (0.1–0.5 mIU/L) as a minimum; MDT input recommended. TSH target should be reviewed in conjunction with treatment plan (RAI, surgery, systemic therapy).`,
+        strength: 'Table 9 footnote c, ATA 2025 — Conditional recommendation, Low certainty evidence (Rec 45)'
+      };
+    }
+    return {
+      target: 'TSH below normal reference range (0.1–0.5 mIU/L or deeper based on disease trajectory)',
+      rationale: 'Structurally incomplete response — Table 9 footnote c specifies TSH below normal reference range. Active locoregional or distant structural disease justifies TSH suppression while treatment is being planned or delivered. Degree of suppression should be individualized based on disease burden, rate of progression, and treatment modality. Multidisciplinary team evaluation recommended.',
+      strength: 'Table 9 footnote c + Rec 45, ATA 2025 — Conditional recommendation, Low certainty evidence'
+    };
+  }
+
+  // Unknown
+  return {
+    target: 'Cannot determine — insufficient response data',
+    rationale: 'Enter Tg value, TgAb status, and imaging findings to classify response per Table 9, which drives the TSH target.',
+    strength: ''
+  };
+}
+
+// ========== FOLLOW-UP PLAN ==========
+function getFollowUpPlan(risk, response, timeSurgery, raiGiven, surgery) {
+  const withRAI = raiGiven && raiGiven !== 'no';
+  const plan = [];
+
+  // ---- TG MONITORING ----
+  let tgPlan = '';
+  if (surgery === 'lobectomy') {
+    tgPlan = 'Tg measurement is not routinely recommended after lobectomy if postoperative Tg is not markedly elevated. If performed, measure once at 6–12 weeks with normal TSH. Specific cutoff uncertain. Monitor residual lobe with USG every 1–3 years (per ATA thyroid nodule guidelines). (Rec 47, Table 11)';
+  } else if (response.cat === 'excellent' && (risk === 'low' || risk === 'low-int')) {
+    tgPlan = 'Nonstimulated Tg every 12 months initially. ' + (withRAI ? 'Target Tg <0.2 ng/mL. ' : 'Target Tg <2.5 ng/mL. ') +
+      'After 5–8 years of excellent biochemical response with normal TSH and negative USG, frequency can be decreased significantly or monitoring may be considered for de-escalation. (Table 11)';
+  } else if (response.cat === 'excellent' && (risk === 'int-high' || risk === 'high')) {
+    tgPlan = 'Nonstimulated Tg every 6–12 months. If consistently <0.2 ng/mL with negative imaging over 2–3 years, may extend interval. Consider stimulated Tg if clinical suspicion rises. TgAb monitoring essential if ever positive.';
+  } else if (response.cat === 'biochem') {
+    tgPlan = 'Tg monitoring every 3–6 months. Rising Tg or Tg >10 ng/mL with negative imaging: consider 18FDG-PET/CT (esp. if RAI-refractory or aggressive histology). TgAb every 6 months.';
+  } else if (response.cat === 'structural') {
+    tgPlan = 'Tg every 3–6 months depending on disease status and treatment plan. Tg doubling time is a key prognostic marker. Multidisciplinary team evaluation recommended.';
+  } else {
+    tgPlan = 'Nonstimulated Tg every 6–12 months. Re-evaluate response category at 6–12 months. TgAb at each measurement.';
+  }
+  plan.push({ icon: '🧪', title: 'Thyroglobulin & TgAb Monitoring', body: tgPlan });
+
+  // ---- NECK ULTRASOUND ----
+  let usgPlan = '';
+  if (surgery === 'lobectomy') {
+    usgPlan = 'One post-operative neck USG recommended (typically within 3–6 months). Residual lobe nodules monitored per ATA thyroid nodule guidelines every 1–3 years. (Table 11)';
+  } else if (response.cat === 'excellent' && (risk === 'low' || risk === 'low-int')) {
+    usgPlan = 'Neck USG every 1–3 years for 5–8 years, then DISCONTINUE unless: (a) Tg rises, (b) TgAb becomes newly detectable, (c) clinical concern arises. Lifelong USG is NOT necessary in excellent responders with low-risk disease. (Table 11, Rec 48)';
+  } else if (response.cat === 'excellent' && risk === 'int-high') {
+    usgPlan = 'Neck USG every 6–12 months for 2–3 years, then every 1–2 years for up to 5–8 years if biochemical response remains excellent. Annual USG can be considered beyond 5 years given intermediate-high initial risk.';
+  } else if (response.cat === 'excellent' && risk === 'high') {
+    usgPlan = 'Neck USG every 6 months for first 2 years, then annually for 5–8 years. Beyond 8 years, individualize based on ongoing risk assessment.';
+  } else if (response.cat === 'biochem') {
+    usgPlan = 'Neck USG every 6 months. If rising Tg with negative neck USG: consider CT neck/chest, MRI, or 18FDG-PET/CT depending on histology and rate of Tg rise.';
+  } else if (response.cat === 'structural') {
+    usgPlan = 'Neck USG every 3–6 months depending on treatment plan. Additional cross-sectional imaging (CT, MRI) as clinically indicated for staging and treatment planning.';
+  } else {
+    usgPlan = 'Neck USG every 6–12 months. Re-assess interval based on response reclassification.';
+  }
+  plan.push({ icon: '🔊', title: 'Neck Ultrasound Schedule', body: usgPlan });
+
+  // ---- RAI WBS ----
+  let wbsPlan = '';
+  if (surgery === 'lobectomy' || !withRAI) {
+    wbsPlan = 'Surveillance RAI WBS is NOT indicated after lobectomy or total thyroidectomy without RAI. (Rec 49A)';
+  } else if (response.cat === 'excellent' && (risk === 'low' || risk === 'low-int')) {
+    wbsPlan = 'Routine diagnostic RAI WBS is NOT required in low/low-intermediate risk with excellent response. (Rec 49B, Conditional recommendation)';
+  } else if (risk === 'int-high' || risk === 'high') {
+    wbsPlan = 'Diagnostic RAI WBS (using 123I or low-activity 131I) can be performed if clinical suspicion for recurrence arises. SPECT-CT improves anatomical localization. (Rec 49C)';
+    if (response.cat === 'biochem') wbsPlan += ' Rising Tg with positive TgAb and negative USG: 123I WBS preferred for diagnostic scan.';
+  } else {
+    wbsPlan = 'Diagnostic WBS only if clinical suspicion arises (rising Tg, TgAb positivity, or new symptoms).';
+  }
+  plan.push({ icon: '☢️', title: 'RAI Whole Body Scan (WBS)', body: wbsPlan });
+
+  // ---- FDG-PET ----
+  let petPlan = '';
+  if (risk === 'high' || response.cat === 'biochem' || response.cat === 'structural') {
+    petPlan = '18FDG-PET/CT is indicated in high-risk DTC with elevated serum Tg (generally >10 ng/mL), particularly with negative RAI imaging (RAI-refractory disease), aggressive histologies (tall cell, OTC), or to assess extent of disease prior to systemic therapy. May also be used for post-treatment response assessment. (Rec 50)';
+  } else {
+    petPlan = '18FDG-PET/CT not routinely indicated at this time. Reserved for elevated Tg (>10 ng/mL) with negative conventional imaging, aggressive histology, or suspected RAIR disease.';
+  }
+  plan.push({ icon: '🫁', title: '18FDG-PET/CT', body: petPlan });
+
+  // ---- STIMULATED Tg ----
+  let stimTgPlan = '';
+  if (surgery !== 'lobectomy' && (risk === 'int-high' || risk === 'high')) {
+    stimTgPlan = 'Stimulated Tg (after TSH stimulation with rhTSH or T4 withdrawal) may be considered if nonstimulated Tg is low-detectable but there is clinical suspicion for persistent disease, or at 12–18 months post-surgery to confirm response category in intermediate-high / high risk patients.';
+  } else if (surgery !== 'lobectomy' && (risk === 'low' || risk === 'low-int') && response.cat === 'excellent') {
+    stimTgPlan = 'Stimulated Tg is NOT routinely required in low/low-intermediate risk with excellent biochemical response.';
+  } else {
+    stimTgPlan = 'Consider stimulated Tg if nonstimulated Tg is indeterminate or there is clinical concern.';
+  }
+  plan.push({ icon: '📈', title: 'Stimulated Thyroglobulin', body: stimTgPlan });
+
+  return plan;
+}
+
+// ========== GENERATE REPORT ==========
+function generateReport() {
+  const { risk, reasons } = calcRisk();
+  const response = calcResponse();
+  const surgery = document.getElementById('surgery').value;
+  const T = document.getElementById('tCategory').value;
+  const N = document.getElementById('nCategory').value;
+  const M = state.mstatus || 'M0';
+  const age = parseInt(document.getElementById('patientAge').value) || 45;
+  const timeSurgery = document.getElementById('timeSurgery').value;
+  const raiGiven = state.raiGiven;
+
+  const comorbidities = {
+    aFib: document.getElementById('aFib').checked,
+    osteoporosis: document.getElementById('osteoporosis').checked,
+    ischemicHD: document.getElementById('ischemicHD').checked,
+    elderly: document.getElementById('elderly').checked
+  };
+
+  const ajcc = getAJCCStage(T, N, M, age);
+  const tshInfo = getTSHTarget(risk, response, comorbidities, timeSurgery);
+  const followUpPlan = getFollowUpPlan(risk, response, timeSurgery, raiGiven, surgery);
+
+  // Risk display
+  const riskMap = {
+    'low': { cls: 'low', title: 'LOW RISK', sub: 'Estimated structural recurrence <10%' },
+    'low-int': { cls: 'low-int', title: 'LOW-INTERMEDIATE RISK', sub: 'Estimated structural recurrence 10–15%' },
+    'int-high': { cls: 'int-high', title: 'INTERMEDIATE-HIGH RISK', sub: 'Estimated structural recurrence ≥16–30%' },
+    'high': { cls: 'high', title: 'HIGH RISK', sub: 'Estimated structural recurrence >30%' }
+  };
+  const rd = riskMap[risk];
+
+  // Render banner
+  const banner = document.getElementById('resultBanner');
+  banner.className = 'result-banner ' + rd.cls;
+  document.getElementById('riskTitle').textContent = rd.title;
+  document.getElementById('riskSub').textContent = rd.sub;
+
+  // AJCC
+  document.getElementById('ajccStage').innerHTML = '<span class="tag tag-blue">' + ajcc.stage + '</span>';
+  document.getElementById('ajccDetail').textContent = ajcc.detail;
+
+  // Response category
+  const respCatMap = {
+    'excellent': 'tag-low', 'indeterminate': 'tag-blue',
+    'biochem': 'tag-int-high', 'structural': 'tag-high', 'unknown': ''
+  };
+  document.getElementById('responseCategory').innerHTML = '<span class="tag ' + (respCatMap[response.cat]||'tag-blue') + '">' + response.label + '</span>';
+  document.getElementById('responseDetail').textContent = response.detail;
+
+  // Build result content
+  let html = '';
+
+  // --- RISK FACTORS WITH JUSTIFICATION ---
+  // Build rich justification data keyed to each detected risk factor
+  const riskJustifications = {
+    // HIGH risk justifications
+    'Distant metastasis (M1) — HIGH risk': {
+      tier: 'high', recurrence: '>30%',
+      evidence: 'M1 disease defines the highest risk category. SEER data show RAI-treated patients with distant metastasis + age >45 + tumour >2 cm + nodal mets have markedly reduced survival. DTC with distant mets treated with RAI had double the overall survival vs untreated in FTC (SEER). AJCC 8th Ed: M1 = Stage II (<55 yrs) or Stage IVB (≥55 yrs).',
+      source: 'Rec 28, Table 10, ATA 2025; AJCC 8th Ed'
+    },
+    'Gross extrathyroidal extension — T4 (HIGH risk)': {
+      tier: 'high', recurrence: '23–40%',
+      evidence: 'Gross ETE into major structures (larynx, trachea, oesophagus, RLN = T4a; prevertebral fascia/carotid = T4b) carries 23–40% recurrence risk per 2015 ATA data, confirmed in 2025. Independent predictor of both locoregional recurrence and disease-specific mortality.',
+      source: 'Fig. 2, ATA 2025; Danilovic et al. (prospective, 596 pts)'
+    },
+    'Gross ETE into major structures': {
+      tier: 'high', recurrence: '23–40%',
+      evidence: 'Gross ETE (T4a/T4b) — invasion beyond strap muscles into larynx, trachea, oesophagus, RLN, prevertebral fascia or encasing carotid. Associated with 23–40% risk of structural recurrence and independently predicts disease-specific mortality.',
+      source: 'Fig. 2, ATA 2025'
+    },
+    'Gross residual disease (R2 resection)': {
+      tier: 'high', recurrence: '>30%',
+      evidence: 'R2 resection (macroscopic residual tumour post-surgery) is a primary HIGH-risk criterion in both 2015 and 2025 ATA guidelines. Inability to achieve complete gross resection is an independent adverse prognostic factor.',
+      source: 'Fig. 2, ATA 2025; Rec 28'
+    },
+    'Poorly differentiated / high grade features': {
+      tier: 'high', recurrence: '>30%',
+      evidence: 'Poorly differentiated thyroid carcinoma (PDTC) features — high mitotic rate, tumour necrosis, solid/trabecular/insular growth — are strongly associated with aggressive clinical behaviour, RAI refractoriness, and markedly reduced disease-free and overall survival.',
+      source: 'Fig. 2, ATA 2025; WHO 5th Ed classification'
+    },
+    'Metastatic lymph node ≥3 cm (cN1 ≥3 cm)': {
+      tier: 'high', recurrence: '40–50%',
+      evidence: 'cN1 with largest node ≥3 cm predicts ~50% recurrence risk (multivariable analysis, 252 pts with multifocal T1a PTC; pN1 >3 cm: HR 4.2). Extranodal extension + >3 metastatic nodes predicts 40% recurrence. This threshold was part of 2015 ATA high-risk criteria and retained in 2025.',
+      source: 'Rec 28, ATA 2025; Bardet et al.; Lee et al. (324 N1b tumours)'
+    },
+    'Macroscopic extranodal extension with >3 positive nodes (~40% recurrence risk)': {
+      tier: 'high', recurrence: '~40%',
+      evidence: 'pN1 with macroscopic extranodal extension (ENE) and >3 metastatic nodes: ~40% recurrence risk per 2015 ATA guidelines, confirmed post-2015. Roh et al. (2071 pts): both micro- and macro-ENE, >5 positive nodes, and LNR >0.3 were independent predictors of recurrence. Meta-analysis (23 studies) showed ENE significantly associated with higher all-cause and cancer-specific mortality.',
+      source: 'Rec 28, ATA 2025; Roh et al.; Chereau et al. (2518 pts)'
+    },
+    'Widely invasive OTC (≥4 vessels or ≥4 foci capsular invasion with ETE)': {
+      tier: 'high', recurrence: '>30%',
+      evidence: 'Widely invasive OTC (≥4 foci of capsular invasion with ETE, or ≥4 vessel invasion) — Mayo Clinic retrospective (173 OTC): widely invasive OTC was independently associated with clinical recurrence and death. Wenter et al.: OTC recurrence 17% vs FTC 8%, with OTC being independent adverse factor for disease-free survival.',
+      source: 'Fig. 2, ATA 2025; Mayo Clinic OTC series; Wenter et al.'
+    },
+    'Extensive vascular invasion (≥4 vessels) — HIGH risk in FTC/OTC': {
+      tier: 'high', recurrence: '>30% distant mets',
+      evidence: 'Extensive angioinvasion (≥4 vessels) in FTC/OTC: 26% recurrence vs 1% with focal invasion. Systematic review and meta-analysis (FTC subgroup): extensive vascular invasion OR 26.38 for distant recurrence. HR 8.03 for distant metastatic disease vs no vascular invasion.',
+      source: 'Fig. 2, ATA 2025; systematic review cited in Rec 28'
+    },
+
+    // INTERMEDIATE-HIGH risk justifications
+    'Clinically evident lateral LN metastasis <3 cm': {
+      tier: 'int-high', recurrence: '16–30%',
+      evidence: 'Clinically evident lateral neck nodal metastasis (N1b) <3 cm: multivariable analysis (252 pts, multifocal T1a PTC with lateral CLND) — cN1 or LN mets >5 mm: 25.9% recurrence risk. Lee et al. (324 N1b tumours): LN mets >2 cm HR 1.15. LNR >0.25–0.5 consistently predicts higher recurrence across multiple studies.',
+      source: 'Rec 28, ATA 2025; Fig. 2'
+    },
+    'Multiple nodal metastases (≥3 nodes)': {
+      tier: 'int-high', recurrence: '16–25%',
+      evidence: 'Park et al. (1040 pts with PTC): >3 LN mets predicted recurrence (sensitivity 63.6%, specificity 77%). Adam et al. (SEER 21,855 + NCDB 47,902): increasing metastatic nodes up to 6 associated with decreased survival (HR 1.12). Furtado et al.: 4–5 metastatic central nodes — 9% recurrence.',
+      source: 'Rec 28, ATA 2025; Park et al.; Adam et al.; Furtado et al.'
+    },
+    'Extensive vascular invasion (≥4 vessels) — intermediate-high risk in PTC': {
+      tier: 'int-high', recurrence: '16–30%',
+      evidence: 'In PTC, extensive lymphovascular invasion is categorised as intermediate-high risk. Systematic review (26 studies, 11,961 pts with all DTC): vascular invasion associated with tumour persistence (OR 2.75) and locoregional recurrence. Wagner et al. (610 pts): LVI not independent predictor of local recurrence but associated with adverse prognostic factors.',
+      source: 'Fig. 2, ATA 2025; Rec 28'
+    },
+    'Aggressive histological subtype (tall cell, columnar, diffuse sclerosing, hobnail, solid)': {
+      tier: 'int-high', recurrence: '16–30%+',
+      evidence: 'Aggressive PTC variants carry significantly higher recurrence risk. Shi et al.: tall cell variant 27.3% recurrence vs classical PTC 16.1% vs FVPTC 9.1%. SEER multivariable analysis: postsurgical RAI improves overall survival specifically in tall cell, diffuse sclerosing, and insular variants. These subtypes are classified as intermediate-high minimum regardless of other features.',
+      source: 'Fig. 2, ATA 2025; Shi et al.; SEER analysis cited in Rec 37'
+    },
+    'High-risk co-mutation (BRAF V600E + TERT)': {
+      tier: 'int-high', recurrence: 'HR 6.59 (BRAF+TERT)',
+      evidence: 'BRAF V600E + TERT promoter co-mutation: meta-analysis shows reduced disease-specific survival (RR 15.09 [CI 7.75–29.37]) vs no mutation. HR for recurrence 6.59 [CI 1.55–27.94] (388 pts, TCGA). More pronounced than BRAFV600E alone (RR 5.34). Triple mutation TERT+BRAF+rs2853669: 76.5% recurrence vs 8.4% in unmutated tumours.',
+      source: 'Rec 10 + 28, ATA 2025; TCGA analysis; meta-analysis cited'
+    },
+    'High-risk co-mutation (RAS + TERT)': {
+      tier: 'int-high', recurrence: 'HR 106 (RAS+TERT)',
+      evidence: 'RAS + TERT promoter co-mutation: adjusted HR for recurrence 106 [CI 15.3–744.49] in TCGA dataset (388 pts, 19 centres). RAS+TERT also associated with PDTC/ATC transformation. EIF1AX + RAS co-occurrence further increases risk of poorly differentiated behaviour.',
+      source: 'Rec 10 + 28, ATA 2025; TCGA thyroid cancer database'
+    },
+    'Extranodal extension in metastatic nodes': {
+      tier: 'int-high', recurrence: '16–40%',
+      evidence: 'ENE (both micro and macro) is an independent predictor of recurrence. Roh et al. (2071 pts): both micro- and macro-ENE independently associated with recurrence. Chereau et al. (2518 pts): ENE in lateral neck was independent predictor of recurrence. Meta-analysis (23 studies): ENE associated with higher all-cause and cancer-specific mortality.',
+      source: 'Rec 28, ATA 2025; Roh et al.; meta-analysis 23 studies'
+    },
+    'Microscopically positive posterior margin (independent risk factor for recurrence)': {
+      tier: 'int-high', recurrence: '11.6% local',
+      evidence: 'Lang et al. (638 pts with DTC, 100 with +ve margins): positive posterior margin — 11.6% recurrence vs 3.6% for anterior margin. Posterior margin positivity was an independent risk factor (HR 22.95, p<0.0001). Mercado et al.: recurrence-free survival 71% (positive margins) vs 90% (negative margins). Note: microscopically positive margins (R1) were NOT part of 2015 ATA risk stratification but are incorporated in 2025.',
+      source: 'Rec 28, ATA 2025; Lang et al.; Mercado et al.'
+    },
+    'T3a (>4 cm, intrathyroidal) — intermediate-high category': {
+      tier: 'int-high', recurrence: '12–16%',
+      evidence: 'T3a (tumour >4 cm confined to thyroid): Chereau et al. — >4 cm without ETE: 12% recurrence; >4 cm with microscopic ETE: 48% recurrence. T3a alone (no other risk factors) places patient in intermediate-high category per Fig. 2. Multiple retrospective analyses confirm size >4 cm as an independent predictor of structural recurrence.',
+      source: 'Fig. 2, ATA 2025; Chereau et al.; Rec 28'
+    },
+
+    // LOW-INTERMEDIATE risk justifications
+    'Strap muscle invasion (extrathyroidal extension into strap muscles)': {
+      tier: 'low-int', recurrence: '5–25.9%',
+      evidence: 'Strap muscle invasion (T3b, gross ETE limited to strap muscles): systematic review and meta-analysis found local recurrence rate 5–25.9% with significant heterogeneity. Higher risk than no ETE but lower than gross invasion into major structures (T4a). Li et al. (4045 pts): strap muscle invasion in 22.5% — associated with multifocality, LN involvement, and distant mets but NOT independently with recurrence after multivariable adjustment.',
+      source: 'Rec 28, ATA 2025; systematic review cited; Li et al.'
+    },
+    'Microscopic ETE (minimal extrathyroidal extension) — low-intermediate': {
+      tier: 'low-int', recurrence: '3–14%',
+      evidence: 'Microscopic (minimal) ETE: Danilovic et al. (596 pts, prospective): 14% recurrence in patients with minimal ETE. Diker-Cohen meta-analysis (13 studies): 7% recurrence with minimal ETE in tumours >1 cm — within low-risk range. Seifert et al. (721 T1a pts): 13.1% LN recurrence with minimal ETE vs 1.25% without. Note: AJCC 8th Ed removed microscopic ETE from T3 staging, but ATA 2025 retains it in risk stratification.',
+      source: 'Rec 28, ATA 2025; Danilovic et al.; Diker-Cohen meta-analysis'
+    },
+    'Central neck micrometastases (≤5 nodes, <2 mm) — low-intermediate': {
+      tier: 'low-int', recurrence: '10–15%',
+      evidence: 'Up to 5 micrometastases <2 mm in central neck: 2015 ATA low-risk criterion retained in 2025 as low-intermediate. Furtado et al. (86 pts): ≤5 clinically evident central neck nodes predicted lower persistent disease; ≤3 nodes — 4.6% recurrence, 4–5 nodes — 9% recurrence. Post-2015 data support this as low-intermediate rather than low risk.',
+      source: 'Rec 28, ATA 2025; Furtado et al.'
+    },
+    'Limited lateral neck micrometastases': {
+      tier: 'low-int', recurrence: '10–15%',
+      evidence: 'Limited lateral neck micrometastatic disease — places patient at low-intermediate risk (10–15% recurrence). Extent (number, size, compartment) determines whether this escalates to intermediate-high. Clinically non-evident (microscopic) lateral nodes differ from clinically evident N1b disease.',
+      source: 'Fig. 2, ATA 2025; Rec 28'
+    },
+    'Focal lymphovascular invasion (<4 vessels)': {
+      tier: 'low-int', recurrence: '10–15%',
+      evidence: 'Focal vascular invasion (<4 vessels): associated with increased risk of distant metastatic disease (HR 2.5, p=0.021) vs no invasion. Classified as low-intermediate in PTC per Fig. 2. In FTC, focal invasion associated with 1% recurrence vs 26% with extensive (≥4 vessels).',
+      source: 'Fig. 2, ATA 2025; systematic review cited in Rec 28'
+    },
+    'Bilateral multifocal disease': {
+      tier: 'low-int', recurrence: '10–21%',
+      evidence: 'Bilateral multifocality: Wang et al. (2638 pts) — classical PTC with multifocality 21.2% vs unifocal 14.1% recurrence. Multivariable analysis: HR 4 for structural recurrence in bilateral multifocal vs unifocal PTCs >1 cm. Meta-analysis (23 studies, 41,616 pts): multifocality associated with increased ETE (RR 1.38), lateral LN mets (RR 1.86), and post-operative recurrence (HR 1.76).',
+      source: 'Rec 28, ATA 2025; Wang et al.; Cui et al. meta-analysis'
+    },
+    'Microscopically positive anterior margin': {
+      tier: 'low-int', recurrence: '3.6%',
+      evidence: 'Microscopically positive anterior margin (R1): Lang et al. (638 pts): 3.6% recurrence with positive anterior margin — lower risk than posterior margin (11.6%). Most studies and meta-analyses (Sanabria et al., 7696 pts) show no significant association between R1 margins and local persistence/recurrence overall. However, NCDB data (>14,000 pts) show R1 margins associated with increased risk of death in T1a and T1–4 cm PTC.',
+      source: 'Rec 28, ATA 2025; Lang et al.; Sanabria meta-analysis; NCDB data'
+    },
+    'Minimally invasive FTC — capsular invasion only (consider low-intermediate)': {
+      tier: 'low-int', recurrence: '1–10%',
+      evidence: 'Minimally invasive FTC with capsular invasion only (no vascular invasion): associated with very low recurrence. Ito et al. (523 FTC pts): focal vascular invasion — 1% recurrence. Distinguished from extensively invasive FTC by absence of vascular invasion. Some categorise as low, others low-intermediate depending on degree of capsular invasion.',
+      source: 'Rec 28, ATA 2025; Ito et al.'
+    },
+    'Limited vascular invasion (<4 vessels) in FTC/OTC — low-intermediate': {
+      tier: 'low-int', recurrence: '10–15%',
+      evidence: 'Encapsulated FTC/OTC with limited vascular invasion (<4 vessels): Ito et al. — 1% recurrence with focal (<4 vessels) vs 26% with extensive (≥4 vessels). Systematic review FTC subgroup: focal vascular invasion associated with distant recurrence (OR significantly lower than extensive). Classified low-intermediate in Fig. 2.',
+      source: 'Fig. 2, ATA 2025; Ito et al.; FTC subgroup meta-analysis'
+    },
+    'Unilateral multifocal disease': {
+      tier: 'low-int', recurrence: '10–13%',
+      evidence: 'Unilateral multifocal disease: Zhang et al. meta-analysis (15 studies, 9665 pts): structural recurrence/persistence 13% in unilateral multifocal vs 5.7% unifocal after total thyroidectomy. Kim et al. (26 studies, 33,976 pts): ≥3 foci associated with higher recurrence (pooled HR 1.95). Lower risk than bilateral multifocal disease.',
+      source: 'Rec 28, ATA 2025; Zhang et al. meta-analysis; Kim et al.'
+    },
+
+    // LOW risk justifications
+    'Intrathyroidal T1-T2, N0, M0 — LOW risk': {
+      tier: 'low', recurrence: '<10%',
+      evidence: 'Intrathyroidal unifocal PTC T1-T2, N0, M0 with no high-risk features: multivariable analysis of 2015 ATA risk system — 1.5% recurrence in low-risk PTC. T1a unifocal: 1.6% recurrence. Disease-free survival 97.6% at 10 years for unifocal tumours. This is the strongest indication for de-escalation of both RAI and monitoring intensity.',
+      source: 'Rec 28, ATA 2025; 2015 ATA validation studies; Woo et al. (1249 pts)'
+    },
+    'Encapsulated IEFVPTC — low risk category': {
+      tier: 'low', recurrence: '<5%',
+      evidence: 'Invasive encapsulated follicular variant of PTC (IEFVPTC, formerly encapsulated FVPTC): lower recurrence than classical PTC. Tunca et al. (258 classical PTC vs 153 FVPTC): lower rates of capsular invasion, microscopic ETE, and LN mets in FVPTC; recurrence rates lower in FVPTC, especially in patients <45 years. Classified as low-risk in Fig. 2 when encapsulated.',
+      source: 'Fig. 2, ATA 2025; Tunca et al.; Henke et al.'
+    },
+    'Up to 5 central micrometastases <2 mm — may remain LOW risk': {
+      tier: 'low', recurrence: '1–5%',
+      evidence: 'Up to 5 central neck micrometastases <2 mm: classified as low-risk in 2015 ATA guidelines (retained as low-low-intermediate boundary in 2025). Furtado et al.: ≤3 central metastatic nodes — 4.6% recurrence. In 2015 guidelines, this was specifically designated low risk. In 2025, this sits at the low/low-intermediate boundary — consider low if all other features are favourable.',
+      source: 'Rec 28, ATA 2025; Furtado et al.'
+    },
+    'Aggressive PTC subtype upgrades to intermediate-high minimum': {
+      tier: 'int-high', recurrence: '>16%',
+      evidence: 'Aggressive histological subtypes (tall cell, columnar, diffuse sclerosing, hobnail, solid/trabecular) independently predict higher recurrence regardless of T/N status. Shi et al.: tall cell variant 27.3% recurrence. SEER analysis: these subtypes benefit from RAI regardless of stage, suggesting intrinsically higher risk behaviour.',
+      source: 'Fig. 2, ATA 2025; Shi et al.; SEER multivariable analysis'
+    }
+  };
+
+  html += `<div class="section-divider"><span>Risk Factors — with Evidence-based Justification</span></div>`;
+  html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">⚠️</span> Factors Contributing to Risk Classification — with Guideline Evidence</div><div class="follow-up-body">`;
+
+  const tierColors = {
+    'high':     { border: 'rgba(239,68,68,0.35)',    bg: 'rgba(239,68,68,0.06)',    label: 'HIGH', color: '#ef4444' },
+    'int-high': { border: 'rgba(245,158,11,0.35)',   bg: 'rgba(245,158,11,0.06)',   label: 'INT-HIGH', color: '#f59e0b' },
+    'low-int':  { border: 'rgba(132,204,22,0.35)',   bg: 'rgba(132,204,22,0.06)',   label: 'LOW-INT', color: '#84cc16' },
+    'low':      { border: 'rgba(34,197,94,0.35)',    bg: 'rgba(34,197,94,0.06)',    label: 'LOW', color: '#22c55e' }
+  };
+
+  if (reasons.length === 0) {
+    const tc = tierColors['low'];
+    html += `
+    <div style="border:1px solid ${tc.border}; background:${tc.bg}; border-radius:9px; padding:14px 16px; margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <span style="background:${tc.bg}; border:1px solid ${tc.border}; color:${tc.color}; font-size:10px; font-family:'DM Mono',monospace; padding:2px 8px; border-radius:100px; letter-spacing:0.06em;">LOW RISK</span>
+        <span style="font-size:13px; font-weight:500; color:var(--text);">No high-risk features — intrathyroidal disease</span>
+      </div>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Unifocal intrathyroidal T1-T2, N0, M0 with no adverse histological features. Multivariable analysis of 2015 ATA risk system: 1.5% recurrence in low-risk PTC; T1a: 1.6% recurrence. 10-year disease-free survival 97.6% for unifocal tumours.</p>
+      <p style="font-size:11px; color:var(--text-dim);">Source: Rec 28, ATA 2025; 2015 ATA validation cohorts</p>
+    </div>`;
+  } else {
+    reasons.forEach(reason => {
+      const jData = riskJustifications[reason];
+      // Determine tier colour from the overall risk
+      const tierKey = jData ? jData.tier : risk;
+      const tc = tierColors[tierKey] || tierColors['low-int'];
+      const recStr = jData ? jData.recurrence : '—';
+      const evidenceStr = jData ? jData.evidence : 'This feature is recognised as a risk modifier in the 2025 ATA Risk of Recurrence classification (Fig. 2 and Rec 28).';
+      const sourceStr = jData ? jData.source : 'ATA 2025 Guidelines, Rec 28, Fig. 2';
+
+      html += `
+      <div style="border:1px solid ${tc.border}; background:${tc.bg}; border-radius:9px; padding:14px 16px; margin-bottom:10px;">
+        <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+          <span style="background:${tc.bg}; border:1px solid ${tc.border}; color:${tc.color}; font-size:10px; font-family:'DM Mono',monospace; padding:2px 8px; border-radius:100px; letter-spacing:0.06em; white-space:nowrap;">${tc.label}</span>
+          <span style="font-size:13px; font-weight:500; color:var(--text); flex:1;">${reason}</span>
+          <span style="font-size:11px; font-family:'DM Mono',monospace; color:${tc.color}; white-space:nowrap; padding:2px 8px; border:1px solid ${tc.border}; border-radius:6px;">Recurrence: ${recStr}</span>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:6px; line-height:1.65;">${evidenceStr}</p>
+        <p style="font-size:11px; color:var(--text-dim); font-family:'DM Mono',monospace;">📎 ${sourceStr}</p>
+      </div>`;
+    });
+  }
+
+  // Add overall risk category summary box
+  const overallTC = tierColors[risk] || tierColors['low'];
+  const riskSummaryText = {
+    'low':     'The combination of features above places this patient in the LOW risk category (<10% structural recurrence). De-escalation of RAI and monitoring intensity is appropriate. Rec 46A: long-term TSH suppression not suggested.',
+    'low-int': 'The combination of features above places this patient in the LOW-INTERMEDIATE risk category (10–15% structural recurrence). Individualised RAI decision. Monitoring intensity intermediate. TSH normal range unless response reclassifies.',
+    'int-high':'The combination of features above places this patient in the INTERMEDIATE-HIGH risk category (≥16–30% structural recurrence). RAI adjuvant therapy recommended. TSH initially mildly subnormal per Rec 45; liberalise as excellent response is sustained.',
+    'high':    'The combination of features above places this patient in the HIGH risk category (>30% structural recurrence). RAI strongly recommended. Subnormal TSH warranted early in follow-up per Rec 45. Multidisciplinary team involvement recommended.'
+  };
+  html += `
+  <div style="border:1px solid ${overallTC.border}; background:${overallTC.bg}; border-radius:9px; padding:14px 16px; margin-top:4px;">
+    <p style="font-size:12px; color:${overallTC.color}; font-weight:600; margin-bottom:4px;">Overall Risk Classification Rationale</p>
+    <p style="font-size:12px; color:var(--text-muted);">${riskSummaryText[risk]}</p>
+    <p style="font-size:11px; color:var(--text-dim); margin-top:6px; font-family:'DM Mono',monospace;">📎 ATA 2025 — Fig. 2, Rec 28 (Strong Recommendation, Moderate certainty evidence)</p>
+  </div>`;
+
+  html += `</div></div>`;
+
+  // --- RESPONSE CRITERIA ---
+  html += `<div class="section-divider"><span>Response to Initial Therapy — ATA Criteria (Table 9)</span></div>`;
+  const responseBodies = {
+    'excellent': { cls: 'response-excellent', title: '✓ Excellent Response', detail: 'No clinical, biochemical or structural evidence of disease. Probability of remaining free of disease is very high. De-escalation of monitoring is appropriate for low/low-intermediate risk disease.' },
+    'indeterminate': { cls: 'response-indeterminate', title: '◎ Indeterminate Response', detail: 'Nonspecific biochemical or structural findings that cannot be confidently classified as benign or malignant. Includes stable/declining TgAb without definitive structural disease. Continue monitoring; response will likely reclassify over time.' },
+    'biochem': { cls: 'response-biochem', title: '⚡ Biochemically Incomplete', detail: 'Abnormal Tg or rising TgAb levels in the absence of localizable structural disease. Further evaluation warranted: consider functional imaging, cross-sectional imaging, or empiric RAI depending on clinical context.' },
+    'structural': { cls: 'response-structural', title: '✗ Structurally Incomplete', detail: 'Persistent or newly identified locoregional or distant metastases on imaging. Multidisciplinary team evaluation required. Treatment decisions based on lesion characteristics, RAI avidity, progression rate, and patient factors.' },
+    'unknown': { cls: 'response-indeterminate', title: '? Response Unknown', detail: 'Insufficient biochemical data entered to classify response. Please ensure Tg value and TgAb status are entered.' }
+  };
+  const rb = responseBodies[response.cat] || responseBodies['unknown'];
+  html += `<div class="response-box ${rb.cls}"><div class="rb-title">${rb.title}</div><div class="rb-detail">${rb.detail}</div></div>`;
+
+  // --- TSH TARGET ---
+  html += `<div class="section-divider"><span>TSH Target & Thyroid Hormone Therapy</span></div>`;
+  html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🎯</span> Recommended TSH Target</div><div class="follow-up-body">`;
+  html += `<p><span class="highlight">${tshInfo.target}</span></p>`;
+  html += `<p>${tshInfo.rationale}</p>`;
+  if (comorbidities.aFib || comorbidities.osteoporosis || comorbidities.ischemicHD || comorbidities.elderly) {
+    html += `<p style="color:#f59e0b;">⚠️ <strong>Comorbidity considerations:</strong> ${
+      [comorbidities.aFib ? 'Atrial fibrillation (↑ stroke/CV risk with suppressed TSH)' : '',
+       comorbidities.osteoporosis ? 'Osteoporosis (TSH suppression accelerates bone loss)' : '',
+       comorbidities.ischemicHD ? 'Ischemic heart disease (risk of angina exacerbation)' : '',
+       comorbidities.elderly ? 'Age ≥65 (increased AF and CV mortality risk)' : '']
+      .filter(Boolean).join('; ')
+    }. Balance benefits and risks carefully.</p>`;
+  }
+  html += `<div class="rec-strength">${tshInfo.strength}</div>`;
+
+  // ── ATA 2015 vs 2025 TSH comparison note ──────────────────────────────────
+  html += `<hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">`;
+  html += `<p style="font-size:11px; font-family:'DM Mono',monospace; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px;">ATA 2015 vs 2025 — TSH Target Philosophy</p>`;
+  html += `
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px;">
+    <div style="background:rgba(79,195,247,0.05); border:1px solid rgba(79,195,247,0.15); border-radius:8px; padding:12px;">
+      <div style="color:var(--accent); font-weight:600; margin-bottom:8px; font-size:11px; letter-spacing:0.05em;">ATA 2015 — Specific numeric targets</div>
+      <div style="color:var(--text-muted); line-height:1.8;">
+        Risk-category driven:<br>
+        <span style="color:var(--low);">Low risk</span> → TSH 0.5–2.0 mIU/L<br>
+        <span style="color:var(--low-int);">Intermediate risk</span> → TSH 0.1–0.5 mIU/L<br>
+        <span style="color:var(--high);">High risk</span> → TSH &lt;0.1 mIU/L<br>
+        <span style="color:var(--text-dim); font-size:11px;">Modified dynamically by response to therapy</span>
+      </div>
+    </div>
+    <div style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.15); border-radius:8px; padding:12px;">
+      <div style="color:#f59e0b; font-weight:600; margin-bottom:8px; font-size:11px; letter-spacing:0.05em;">ATA 2025 — Directional only, no specific numbers</div>
+      <div style="color:var(--text-muted); line-height:1.8;">
+        Response-category driven:<br>
+        <span style="color:var(--low);">Excellent / Indeterminate</span> → Normal range<br>
+        <span style="color:var(--high);">Biochem / Structural incomplete</span> → Below normal<br>
+        <span style="color:var(--text-dim); font-size:11px;">Initial risk (Rec 45) &amp; comorbidities modulate degree</span>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:10px; padding:9px 12px; background:rgba(122,139,168,0.06); border-radius:7px; font-size:11px; color:var(--text-dim); line-height:1.7;">
+    <strong style="color:var(--text-muted);">Why 2025 dropped specific numbers:</strong>
+    Multiple large studies (including a 2024 meta-analysis and a 3,238-patient NTCTCSG cohort) found no significant difference in progression-free, disease-free, or relapse-free survival across specific TSH subranges in intermediate/high-risk DTC. Only 29% of patients in real-world centres achieved 2015 numeric targets despite good adherence — making those thresholds practically unworkable.
+    <br><br>
+    <strong style="color:#f59e0b;">⚠️ Numeric ranges shown in this tool</strong> (e.g. 0.1–0.5 mIU/L) are <strong>clinical interpolations</strong> derived from the evidence reviewed within the 2025 guidelines and consistent with the 2015 framework — they are <em>not explicitly specified</em> in the 2025 ATA recommendations. Use as a practical guide, not a guideline-mandated target.
+  </div>`;
+  html += `</div></div>`;
+
+  // --- RAI RECOMMENDATION ---
+  // Critical two-state logic:
+  //   STATE A — RAI not yet given → "Should RAI be administered?" (Table 10, initial risk-driven)
+  //   STATE B — RAI already given → "Is further/repeat RAI indicated?" (response-driven, NOT initial risk)
+  html += `<div class="section-divider"><span>RAI Guidance</span></div>`;
+  const raiAlreadyGiven = raiGiven && raiGiven !== 'no';
+
+  if (!raiAlreadyGiven) {
+    // ── STATE A: RAI not yet given ──────────────────────────────────────────
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">☢️</span> Initial Post-operative RAI Decision (Table 10)</div><div class="follow-up-body">`;
+    if (surgery === 'lobectomy') {
+      html += `<p><span class="highlight">RAI cannot be administered</span> after thyroid lobectomy — a functioning remnant lobe is present with sufficient iodine avidity to preclude meaningful RAI uptake in potential disease sites. If RAI is deemed necessary based on final pathology, completion thyroidectomy must be performed first. (Rec 49A)</p>`;
+      html += `<div class="rec-strength">Good Practice Statement, ATA 2025 — Rec 49A</div>`;
+    } else if (risk === 'low') {
+      html += `<p><span class="highlight">RAI NOT recommended</span> — Low-risk DTC. Randomised controlled trial data (ESTIMABL1, ESTIMABL2, HiLo) demonstrate no benefit of remnant ablation over observation in low-risk disease. Routine RAI for remnant ablation is not indicated.</p>`;
+      html += `<div class="rec-strength">Strong Recommendation, High certainty evidence — Rec 36, Table 10, ATA 2025</div>`;
+    } else if (risk === 'low-int') {
+      html += `<p><span class="highlight">RAI: Individualised decision — not routine</span></p>`;
+      html += `<p>Low-intermediate risk does not mandate RAI for all patients. If administered: typical activity <strong>30–50 mCi (1.1–1.85 GBq)</strong>. Goal: remnant ablation ± adjuvant therapy.</p>`;
+      html += `<p>Factors favouring RAI in this group: adverse histology, extensive central nodal disease, elevated postoperative Tg, older age, incomplete sonographic evaluation of neck, patient preference for enhanced biochemical follow-up.</p>`;
+      html += `<div class="rec-strength">Conditional recommendation, Moderate certainty evidence — Rec 37, Table 10, ATA 2025</div>`;
+    } else if (risk === 'int-high') {
+      html += `<p><span class="highlight">RAI recommended — adjuvant therapy</span></p>`;
+      html += `<p>Intermediate-high risk: RAI adjuvant therapy should be considered. Typical activity: <strong>30–100 mCi (1.1–3.7 GBq)</strong>. Goal: remnant ablation + adjuvant therapy. Higher activity (toward 100 mCi) for higher-intermediate features (aggressive histology, extensive nodal disease, elevated Tg).</p>`;
+      html += `<div class="rec-strength">Conditional recommendation, Moderate certainty evidence — Rec 37, Table 10, ATA 2025</div>`;
+    } else if (risk === 'high') {
+      html += `<p><span class="highlight">RAI strongly recommended</span></p>`;
+      html += `<p>High-risk DTC: RAI is a standard component of initial management. Typical activity: <strong>100–150 mCi (3.7–5.55 GBq)</strong> for adjuvant intent. If known distant metastases: <strong>100–200 mCi (3.7–7.4 GBq)</strong> or dosimetry-guided dosing.</p>`;
+      html += `<p>For activities >150 mCi or in patients with diffuse pulmonary metastases: dosimetry-based approach recommended to reduce risk of bone marrow suppression and pulmonary fibrosis.</p>`;
+      html += `<div class="rec-strength">Strong Recommendation — Rec 37–38, Table 10, ATA 2025</div>`;
+    }
+    html += `</div></div>`;
+
+  } else {
+    // ── STATE B: RAI already given — completely different question ──────────
+    // Now driven by RESPONSE CATEGORY + post-therapy WBS findings, NOT initial risk
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">☢️</span> Further / Repeat RAI — Post-RAI Assessment</div><div class="follow-up-body">`;
+
+    // State the RAI already given
+    const raiGivenLabel = { ablation: 'Remnant ablation (30–50 mCi)', adjuvant: 'Adjuvant therapy (50–150 mCi)', therapeutic: 'Therapeutic dose (≥100–200 mCi, known disease)' };
+    html += `<p style="margin-bottom:12px;">RAI already administered: <span class="highlight">${raiGivenLabel[raiGiven] || raiGiven}</span>. The relevant question is now whether <em>further</em> RAI is indicated — this is driven by <strong>response category and post-therapy WBS findings</strong>, not by initial risk category.</p>`;
+    html += `<hr style="border:none;border-top:1px solid var(--border);margin:10px 0;">`;
+
+    if (response.cat === 'excellent') {
+      html += `<p><span class="highlight" style="color:var(--low);">Further RAI NOT indicated</span></p>`;
+      html += `<p>Excellent response (nonstimulated Tg &lt;0.2 ng/mL or stimulated Tg &lt;1 ng/mL with negative imaging) — no evidence of residual disease to treat. Routine surveillance RAI WBS is also not required in low/low-intermediate risk with excellent response. (Rec 49B)</p>`;
+      html += `<div class="rec-strength">Conditional recommendation, Low certainty evidence — Rec 49B, ATA 2025</div>`;
+
+    } else if (response.cat === 'indeterminate') {
+      html += `<p><span class="highlight" style="color:var(--accent);">Further RAI NOT indicated at this time</span></p>`;
+      html += `<p>Indeterminate response (e.g. stimulated Tg 1–10 ng/mL with negative USG and negative WBS) does <strong>not</strong> automatically warrant empiric repeat RAI. The probability of long-term benefit from empiric RAI in Tg-positive, scan-negative patients is low — one analysis found insufficient evidence to support it, and one series showed structural disease progression in 56% despite empiric RAI.</p>`;
+      html += `<p>Correct approach:</p>`;
+      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+        <li style="margin-bottom:5px;">Repeat stimulated Tg ± neck USG at 6–12 months to re-classify response</li>
+        <li style="margin-bottom:5px;">If Tg is rising on serial measurements → reclassify as biochemically incomplete and investigate for structural disease</li>
+        <li style="margin-bottom:5px;">Consider diagnostic <sup>123</sup>I or low-activity <sup>131</sup>I WBS only if intermediate-high/high initial risk with rising or elevated TgAb (Rec 49C)</li>
+        <li style="margin-bottom:5px;">Consider <sup>18</sup>FDG-PET/CT if Tg &gt;10 ng/mL or aggressive histology suspected</li>
+        <li>Empiric RAI without localised disease is not indicated (Rec 58)</li>
+      </ul>`;
+      html += `<div class="rec-strength">Rec 49, 58, ATA 2025 — Good Practice Statement + Conditional recommendation</div>`;
+
+    } else if (response.cat === 'biochem') {
+      html += `<p><span class="highlight" style="color:var(--int-high);">Further RAI: Consider only if disease is RAI-avid and localisable</span></p>`;
+      html += `<p>Biochemically incomplete response (elevated Tg / rising TgAb with negative imaging) — empiric RAI has limited benefit without structural localisation. Key steps before considering repeat RAI:</p>`;
+      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+        <li style="margin-bottom:5px;">Diagnostic <sup>123</sup>I WBS to assess RAI avidity and localise disease (Rec 49C)</li>
+        <li style="margin-bottom:5px;">SPECT-CT if any uptake found on planar WBS for anatomical correlation</li>
+        <li style="margin-bottom:5px;"><sup>18</sup>FDG-PET/CT if Tg &gt;10 ng/mL or negative RAI scan — identifies RAI-refractory or de-differentiated foci</li>
+        <li style="margin-bottom:5px;">If no uptake on diagnostic WBS despite structural disease → likely RAI-refractory; do NOT administer empiric RAI (Rec 59B)</li>
+        <li style="margin-bottom:5px;">If avid uptake localised → repeat therapeutic RAI may be appropriate (activity based on site: cervical 30–100 mCi; distant mets 100–200 mCi or dosimetry)</li>
+        <li>Note: second RAI in biochemically incomplete response — only 26.7% had normalised Tg at 1–2 years (Hirsch et al., retrospective). Evidence is low quality.</li>
+      </ul>`;
+      html += `<div class="rec-strength">Rec 49C, 53, 58, 59, ATA 2025 — Conditional recommendation, Low certainty evidence</div>`;
+
+    } else if (response.cat === 'structural') {
+      html += `<p><span class="highlight" style="color:var(--high);">Further RAI: Only if disease is confirmed RAI-avid — multidisciplinary decision</span></p>`;
+      html += `<p>Structurally incomplete response — the key determinant for repeat RAI is <strong>RAI avidity of the structural disease</strong>, not initial risk category.</p>`;
+      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+        <li style="margin-bottom:5px;"><strong>RAI-avid disease on post-therapy WBS</strong> → repeat therapeutic RAI appropriate. Activity: 100–150 mCi locoregional; 100–200 mCi or dosimetry for distant mets (Rec 55–57)</li>
+        <li style="margin-bottom:5px;"><strong>No RAI avidity on diagnostic scan + structural disease visible on imaging</strong> → RAI-refractory (RAIR) — do NOT administer further RAI (Rec 59B); refer for systemic therapy evaluation</li>
+        <li style="margin-bottom:5px;"><strong>Disease progression within 6 months of RAI despite prior uptake</strong> → RAIR criteria met; systemic therapy (MKI/targeted) should be considered (Rec 59–61)</li>
+        <li style="margin-bottom:5px;">For isolated cervical LN structural disease: surgical resection is preferred first-line; additional RAI may be considered after local therapy or if surgery is not feasible (Rec 53)</li>
+        <li>Second RAI for structural locoregional disease: limited benefit — only 17.6% resolution of nodes; 22.7% showed locoregional progression at 1–2 years (Hirsch et al.)</li>
+      </ul>`;
+      html += `<div class="rec-strength">Rec 53, 55–59, ATA 2025 — Conditional recommendation, Low certainty evidence; RAIR criteria: Good Practice Statement</div>`;
+
+    } else {
+      html += `<p>Response category could not be determined from the data entered. Classify response per Table 9 before making further RAI decisions.</p>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // --- FOLLOW-UP PLAN ---
+  html += `<div class="section-divider"><span>Follow-up Plan & Surveillance Investigations</span></div>`;
+  followUpPlan.forEach(item => {
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">${item.icon}</span>${item.title}</div><div class="follow-up-body"><p>${item.body.replace(/\n/g,'<br>')}</p></div></div>`;
+  });
+
+  // --- DYNAMIC RISK STRATIFICATION NOTE ---
+  html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🔄</span>Dynamic Risk Stratification (Ongoing Re-assessment)</div><div class="follow-up-body">`;
+  html += `<p>The ATA Response Criteria should be applied at <span class="highlight">3 months, 6–12 months, and annually</span> thereafter to reclassify patients dynamically. Most patients initially categorized as intermediate/high risk who achieve excellent biochemical response can be reclassified to lower risk over time.</p>`;
+  html += `<ul>
+    <li><span class="hl">Excellent Response:</span> De-escalate monitoring intensity. Long-term TSH suppression not required for low/intermediate risk.</li>
+    <li><span class="hl">Indeterminate:</span> Continue current monitoring; repeat assessment in 6–12 months.</li>
+    <li><span class="hl">Biochemically Incomplete:</span> Identify source of Tg. Consider functional imaging. Evaluate for further treatment.</li>
+    <li><span class="hl">Structurally Incomplete:</span> Multidisciplinary team; treatment planning based on disease extent, RAI avidity, and progression rate.</li>
+  </ul>`;
+  html += `<div class="rec-strength">Good Practice Statement — Rec 51, ATA 2025 Guidelines</div>`;
+  html += `</div></div>`;
+
+  // Patient summary box
+  const histroPretty = document.getElementById('histology').options[document.getElementById('histology').selectedIndex]?.text || '—';
+  html += `<div class="section-divider"><span>Summary</span></div>`;
+  html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">📋</span>Patient Summary</div><div class="follow-up-body">`;
+  html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; font-size:12px;">
+    <div><span style="color:var(--text-dim)">Histology:</span> <span class="highlight">${histroPretty}</span></div>
+    <div><span style="color:var(--text-dim)">T Category:</span> <span class="highlight">${T || '—'}</span></div>
+    <div><span style="color:var(--text-dim)">N Category:</span> <span class="highlight">${N || '—'}</span></div>
+    <div><span style="color:var(--text-dim)">M Status:</span> <span class="highlight">${M}</span></div>
+    <div><span style="color:var(--text-dim)">Surgery:</span> <span class="highlight">${surgery || '—'}</span></div>
+    <div><span style="color:var(--text-dim)">RAI Given:</span> <span class="highlight">${raiGiven || 'Not specified'}</span></div>
+    <div><span style="color:var(--text-dim)">Tg:</span> <span class="highlight">${document.getElementById('tgValue').value || '—'} ng/mL (${state.tgContext || '?'})</span></div>
+    <div><span style="color:var(--text-dim)">TgAb:</span> <span class="highlight">${state.tgab || '—'}</span></div>
+  </div>`;
+  html += `<p style="margin-top:12px; font-size:11px; color:var(--text-dim);">Generated: ${new Date().toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'})} | Based on: ATA 2025 DTC Guidelines (Ringel, Sosa et al. Thyroid 2025;35(8))</p>`;
+  html += `</div></div>`;
+
+  document.getElementById('resultContent').innerHTML = html;
+
+  // Switch views
+  document.getElementById('form-section').style.display = 'none';
+  document.getElementById('result-section').style.display = 'block';
+  document.getElementById('progressBar').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetAll() {
+  location.reload();
+}
+</script>
+</body>
+</html>

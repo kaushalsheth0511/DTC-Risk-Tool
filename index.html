@@ -202,6 +202,57 @@
   .result-card .rc-value { font-size: 18px; font-weight: 600; }
   .result-card .rc-detail { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
+  /* ===== AT-A-GLANCE SNAPSHOT PANEL ===== */
+  .snapshot {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 22px;
+    overflow: hidden;
+  }
+  .snapshot-head {
+    padding: 12px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .snapshot-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .snapshot-cell {
+    padding: 18px 20px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .snapshot-cell:last-child { border-right: none; }
+  .snap-label {
+    font-size: 10px; font-family: 'DM Mono', monospace;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .snap-value { font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .snap-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .snap-chip {
+    display: inline-block; align-self: flex-start;
+    padding: 3px 10px; border-radius: 100px;
+    font-size: 11px; font-family: 'DM Mono', monospace; font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .snap-low { background: rgba(34,197,94,0.12); color: #16a34a; }
+  .snap-low-int { background: rgba(132,204,22,0.14); color: #65a30d; }
+  .snap-int-high { background: rgba(245,158,11,0.14); color: #d97706; }
+  .snap-high { background: rgba(239,68,68,0.12); color: #dc2626; }
+  .snap-blue { background: rgba(79,195,247,0.14); color: #0284c7; }
+  .snap-accent-bar { height: 3px; width: 100%; }
+
+  @media (max-width: 640px) {
+    .snapshot-grid { grid-template-columns: 1fr 1fr; }
+    .snapshot-cell:nth-child(2) { border-right: none; }
+    .snapshot-cell:nth-child(1), .snapshot-cell:nth-child(2) { border-bottom: 1px solid var(--border); }
+  }
+
   .follow-up-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 12px; margin-bottom: 16px; overflow: hidden;
@@ -569,13 +620,15 @@
         </div>
 
         <div class="field">
-          <label>Post-op RAI Whole Body Scan (WBS)</label>
+          <label>RAI Whole Body Scan (WBS) — post-therapy or diagnostic</label>
           <div class="toggle-group">
             <button class="toggle-btn" onclick="toggle(this,'postWBS','not-done')">Not performed / Not planned</button>
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','negative')">Done — No abnormal uptake (negative scan)</button>
             <button class="toggle-btn" onclick="toggle(this,'postWBS','thyroid-bed-only')">Uptake in thyroid bed only</button>
-            <button class="toggle-btn" onclick="toggle(this,'postWBS','outside-bed')">Uptake outside thyroid bed (neck nodes)</button>
+            <button class="toggle-btn" onclick="toggle(this,'postWBS','outside-bed')">Uptake outside thyroid bed (neck/mediastinal nodes)</button>
             <button class="toggle-btn" onclick="toggle(this,'postWBS','distant-uptake')">Distant uptake (chest/bone/other)</button>
           </div>
+          <div class="info-box"><b>TENIS detection:</b> If Tg is elevated but this scan shows no abnormal uptake (negative), the tool will flag possible TENIS syndrome (Thyroglobulin-Elevated Negative Iodine Scan) and guide FDG-PET/CT.</div>
         </div>
 
         <div class="field">
@@ -718,6 +771,33 @@
       <div class="risk-label">ATA 2025 — Risk of Structural Recurrence</div>
       <div class="risk-title" id="riskTitle">—</div>
       <div class="risk-sub" id="riskSub">—</div>
+    </div>
+
+    <!-- AT-A-GLANCE SNAPSHOT -->
+    <div class="snapshot" id="snapshotPanel">
+      <div class="snapshot-head">⬡ At-a-glance summary</div>
+      <div class="snapshot-grid">
+        <div class="snapshot-cell">
+          <div class="snap-label">Risk of Recurrence</div>
+          <span class="snap-chip" id="snapRisk">—</span>
+          <div class="snap-sub" id="snapRiskSub">—</div>
+        </div>
+        <div class="snapshot-cell">
+          <div class="snap-label">Structural Status</div>
+          <span class="snap-chip" id="snapStructural">—</span>
+          <div class="snap-sub" id="snapStructuralSub">—</div>
+        </div>
+        <div class="snapshot-cell">
+          <div class="snap-label">Biochemical Status</div>
+          <span class="snap-chip" id="snapBiochem">—</span>
+          <div class="snap-sub" id="snapBiochemSub">—</div>
+        </div>
+        <div class="snapshot-cell">
+          <div class="snap-label">TSH Target</div>
+          <div class="snap-value" id="snapTSH" style="font-size:14px;">—</div>
+          <div class="snap-sub" id="snapTSHsub">—</div>
+        </div>
+      </div>
     </div>
 
     <div class="result-grid">
@@ -1018,7 +1098,7 @@ function calcResponse() {
 //             subnormal may be reasonable"
 //   Table 9 footnote c (Incomplete): "TSH below normal; comorbidities must be factored in"
 
-function getTSHTarget(risk, response, comorbidities, timeSurgery) {
+function getTSHTarget(risk, response, comorbidities, timeSurgery, surgery) {
   const hasComorbid = comorbidities.aFib || comorbidities.osteoporosis || comorbidities.ischemicHD || comorbidities.elderly;
   const comorbidList = [
     comorbidities.aFib ? 'atrial fibrillation' : '',
@@ -1029,6 +1109,25 @@ function getTSHTarget(risk, response, comorbidities, timeSurgery) {
 
   const earlyPostOp = timeSurgery === 'lt3m' || timeSurgery === '3to12m';
   const sustained = timeSurgery === '2to5y' || timeSurgery === 'gt5y';
+
+  // ── LOBECTOMY-SPECIFIC TSH TARGET ───────────────────────────────────────────
+  // After lobectomy the goal is the NORMAL reference range (Table 9), NOT suppression.
+  // A meaningful fraction of patients need no LT4 at all if the remnant maintains euthyroidism.
+  if (surgery === 'lobectomy') {
+    if (response.cat === 'biochem' || response.cat === 'structural') {
+      return {
+        target: 'TSH below normal reference range — but reconsider surgical completion',
+        rationale: 'Biochemically/structurally incomplete response after lobectomy is unusual and warrants completion thyroidectomy ± RAI rather than relying on TSH suppression alone. If completion surgery is pursued, manage TSH per the post-total-thyroidectomy pathway. Tg is an unreliable marker while a remnant lobe is present (see monitoring).',
+        strength: 'Table 9 + Rec 30, ATA 2025'
+      };
+    }
+    // Excellent / indeterminate / unknown after lobectomy → normal reference range
+    return {
+      target: 'TSH within normal reference range — aim 0.5–2.0 mIU/L; keep below 2 mIU/L',
+      rationale: 'After lobectomy for low/intermediate-risk DTC, the TSH goal is the normal reference range (Table 9) — NOT suppression. A retrospective series (1047 lobectomy patients) found TSH >1.85 mIU/L at 1 year was an independent risk factor for recurrence, so target the lower half of the normal range. If TSH rises above the normal reference range, start levothyroxine. With a normal-range goal, ~70–80% of lobectomy patients can avoid thyroid hormone entirely; with a 0.5–2.0 goal only ~20–30% avoid it. Avoid over-suppression — no recurrence benefit and adds risk.',
+      strength: 'Table 9 + Rec 45/46, ATA 2025 — TSH within normal reference range (Conditional recommendation, Low certainty evidence)'
+    };
+  }
 
   // ── EXCELLENT RESPONSE ──────────────────────────────────────────────────────
   if (response.cat === 'excellent') {
@@ -1238,6 +1337,10 @@ function generateReport() {
   const age = parseInt(document.getElementById('patientAge').value) || 45;
   const timeSurgery = document.getElementById('timeSurgery').value;
   const raiGiven = state.raiGiven;
+  const postWBS = state.postWBS;
+  const postUSG = state.postUSG;
+  const tgab = state.tgab;
+  const tgContext = state.tgContext;
 
   const comorbidities = {
     aFib: document.getElementById('aFib').checked,
@@ -1247,7 +1350,7 @@ function generateReport() {
   };
 
   const ajcc = getAJCCStage(T, N, M, age);
-  const tshInfo = getTSHTarget(risk, response, comorbidities, timeSurgery);
+  const tshInfo = getTSHTarget(risk, response, comorbidities, timeSurgery, surgery);
   const followUpPlan = getFollowUpPlan(risk, response, timeSurgery, raiGiven, surgery);
 
   // Risk display
@@ -1264,6 +1367,58 @@ function generateReport() {
   banner.className = 'result-banner ' + rd.cls;
   document.getElementById('riskTitle').textContent = rd.title;
   document.getElementById('riskSub').textContent = rd.sub;
+
+  // ===== AT-A-GLANCE SNAPSHOT =====
+  // 1. Risk chip
+  const riskChipMap = {
+    'low':     { cls:'snap-low',     label:'LOW',          sub:'<10% recurrence' },
+    'low-int': { cls:'snap-low-int', label:'LOW-INT',      sub:'10–15% recurrence' },
+    'int-high':{ cls:'snap-int-high',label:'INT-HIGH',     sub:'≥16–30% recurrence' },
+    'high':    { cls:'snap-high',    label:'HIGH',         sub:'>30% recurrence' }
+  };
+  const rc = riskChipMap[risk] || riskChipMap['low'];
+  const elRisk = document.getElementById('snapRisk');
+  elRisk.className = 'snap-chip ' + rc.cls;
+  elRisk.textContent = rc.label;
+  document.getElementById('snapRiskSub').textContent = rc.sub + ' · ' + ajcc.stage;
+
+  // 2 & 3. Separate STRUCTURAL and BIOCHEMICAL completeness from response category
+  // structural complete = no structural disease; biochemical complete = Tg/TgAb acceptable
+  let structStatus, structCls, structSub, biochemStatus, biochemCls, biochemSub;
+  switch (response.cat) {
+    case 'excellent':
+      structStatus = 'Complete';  structCls = 'snap-low'; structSub = 'No structural disease on imaging';
+      biochemStatus = 'Complete'; biochemCls = 'snap-low'; biochemSub = 'Tg/TgAb within target';
+      break;
+    case 'indeterminate':
+      structStatus = 'Indeterminate'; structCls = 'snap-blue'; structSub = 'Nonspecific imaging findings';
+      biochemStatus = 'Indeterminate'; biochemCls = 'snap-blue'; biochemSub = 'Borderline Tg / stable-declining TgAb';
+      break;
+    case 'biochem':
+      structStatus = 'Complete';  structCls = 'snap-low'; structSub = 'No structural disease localised';
+      biochemStatus = 'Incomplete'; biochemCls = 'snap-int-high'; biochemSub = 'Elevated/rising Tg or TgAb';
+      break;
+    case 'structural':
+      structStatus = 'Incomplete'; structCls = 'snap-high'; structSub = 'Persistent/recurrent disease on imaging';
+      biochemStatus = 'Incomplete'; biochemCls = 'snap-high'; biochemSub = 'Accompanies structural disease';
+      break;
+    default:
+      structStatus = '—'; structCls = 'snap-blue'; structSub = 'Insufficient data';
+      biochemStatus = '—'; biochemCls = 'snap-blue'; biochemSub = 'Enter Tg / TgAb / imaging';
+  }
+  const elStruct = document.getElementById('snapStructural');
+  elStruct.className = 'snap-chip ' + structCls; elStruct.textContent = structStatus;
+  document.getElementById('snapStructuralSub').textContent = structSub;
+  const elBio = document.getElementById('snapBiochem');
+  elBio.className = 'snap-chip ' + biochemCls; elBio.textContent = biochemStatus;
+  document.getElementById('snapBiochemSub').textContent = biochemSub;
+
+  // 4. TSH target (concise)
+  document.getElementById('snapTSH').textContent = tshInfo.target;
+  document.getElementById('snapTSHsub').textContent = response.cat === 'excellent'
+    ? 'Per response category (Table 9)'
+    : (response.cat === 'unknown' ? 'Pending complete data' : 'Driven by response + risk');
+
 
   // AJCC
   document.getElementById('ajccStage').innerHTML = '<span class="tag tag-blue">' + ajcc.stage + '</span>';
@@ -1584,28 +1739,53 @@ function generateReport() {
   if (!raiAlreadyGiven) {
     // ── STATE A: RAI not yet given ──────────────────────────────────────────
     html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">☢️</span> Initial Post-operative RAI Decision (Table 10)</div><div class="follow-up-body">`;
-    if (surgery === 'lobectomy') {
+
+    // PRIORITY OVERRIDE: if a scan has already demonstrated iodine-avid structural disease,
+    // RAI is therapeutic (not merely adjuvant) and is directly indicated — regardless of risk tier.
+    const avidStructural = (postWBS === 'outside-bed' || postWBS === 'distant-uptake');
+    if (surgery !== 'lobectomy' && avidStructural) {
+      const siteLabel = postWBS === 'distant-uptake' ? 'distant (chest/bone/other)' : 'locoregional (neck/mediastinal nodes)';
+      const activityRec = postWBS === 'distant-uptake' ? '100–200 mCi (3.7–7.4 GBq), or dosimetry-guided' : '100–150 mCi (3.7–5.55 GBq)';
+      html += `<div class="alert-box" style="background:var(--high-bg); border:1px solid var(--high); color:var(--high); padding:14px 16px; border-radius:9px; margin-bottom:12px; font-size:13px;">☢️ <strong>Iodine-avid structural disease demonstrated on scan → THERAPEUTIC RAI IS INDICATED NOW.</strong></div>`;
+      html += `<p><span class="highlight" style="color:var(--high);">Immediate next step: Administer therapeutic <sup>131</sup>I</span></p>`;
+      html += `<p>The whole-body / diagnostic scan shows iodine-avid uptake at a ${siteLabel} site. This is no longer a question of adjuvant remnant ablation — it is <strong>therapeutic treatment of known, iodine-avid disease</strong>, which is a direct indication for <sup>131</sup>I (Rec 55–57). The avidity question is already answered by the scan.</p>`;
+      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+        <li style="margin-bottom:5px;"><strong>Recommended activity: ${activityRec}</strong> for ${siteLabel} iodine-avid disease. (For mediastinal/neck nodal uptake, 100–150 mCi is typical; ablation-range 30–50 mCi is generally insufficient for therapeutic intent.)</li>
+        <li style="margin-bottom:5px;">SPECT-CT for precise anatomical localisation; CT neck/chest to map full extent before therapy</li>
+        <li style="margin-bottom:5px;">Ensure adequate TSH stimulation (>30 mIU/L) and low-iodine diet before dosing</li>
+        <li style="margin-bottom:5px;">${postWBS === 'distant-uptake' ? 'For diffuse pulmonary uptake → dosimetry-guided dosing to limit lung/marrow toxicity' : 'For surgically accessible isolated cervical nodes → surgical resection may be considered first-line (Rec 53); RAI is appropriate for mediastinal/multifocal avid disease or when surgery is not feasible'}</li>
+        <li>Post-therapy WBS 5–7 days after treatment to confirm uptake and document baseline for response assessment</li>
+      </ul>`;
+      html += `<div class="rec-strength">Rec 53, 55–57, Table 10, ATA 2025 — therapeutic RAI for iodine-avid structural disease</div>`;
+      html += `</div></div>`;
+    } else if (surgery === 'lobectomy') {
       html += `<p><span class="highlight">RAI cannot be administered</span> after thyroid lobectomy — a functioning remnant lobe is present with sufficient iodine avidity to preclude meaningful RAI uptake in potential disease sites. If RAI is deemed necessary based on final pathology, completion thyroidectomy must be performed first. (Rec 49A)</p>`;
       html += `<div class="rec-strength">Good Practice Statement, ATA 2025 — Rec 49A</div>`;
+      html += `</div></div>`;
     } else if (risk === 'low') {
       html += `<p><span class="highlight">RAI NOT recommended</span> — Low-risk DTC. Randomised controlled trial data (ESTIMABL1, ESTIMABL2, HiLo) demonstrate no benefit of remnant ablation over observation in low-risk disease. Routine RAI for remnant ablation is not indicated.</p>`;
       html += `<div class="rec-strength">Strong Recommendation, High certainty evidence — Rec 36, Table 10, ATA 2025</div>`;
+      html += `</div></div>`;
     } else if (risk === 'low-int') {
       html += `<p><span class="highlight">RAI: Individualised decision — not routine</span></p>`;
       html += `<p>Low-intermediate risk does not mandate RAI for all patients. If administered: typical activity <strong>30–50 mCi (1.1–1.85 GBq)</strong>. Goal: remnant ablation ± adjuvant therapy.</p>`;
       html += `<p>Factors favouring RAI in this group: adverse histology, extensive central nodal disease, elevated postoperative Tg, older age, incomplete sonographic evaluation of neck, patient preference for enhanced biochemical follow-up.</p>`;
       html += `<div class="rec-strength">Conditional recommendation, Moderate certainty evidence — Rec 37, Table 10, ATA 2025</div>`;
+      html += `</div></div>`;
     } else if (risk === 'int-high') {
       html += `<p><span class="highlight">RAI recommended — adjuvant therapy</span></p>`;
       html += `<p>Intermediate-high risk: RAI adjuvant therapy should be considered. Typical activity: <strong>30–100 mCi (1.1–3.7 GBq)</strong>. Goal: remnant ablation + adjuvant therapy. Higher activity (toward 100 mCi) for higher-intermediate features (aggressive histology, extensive nodal disease, elevated Tg).</p>`;
       html += `<div class="rec-strength">Conditional recommendation, Moderate certainty evidence — Rec 37, Table 10, ATA 2025</div>`;
+      html += `</div></div>`;
     } else if (risk === 'high') {
       html += `<p><span class="highlight">RAI strongly recommended</span></p>`;
       html += `<p>High-risk DTC: RAI is a standard component of initial management. Typical activity: <strong>100–150 mCi (3.7–5.55 GBq)</strong> for adjuvant intent. If known distant metastases: <strong>100–200 mCi (3.7–7.4 GBq)</strong> or dosimetry-guided dosing.</p>`;
       html += `<p>For activities >150 mCi or in patients with diffuse pulmonary metastases: dosimetry-based approach recommended to reduce risk of bone marrow suppression and pulmonary fibrosis.</p>`;
       html += `<div class="rec-strength">Strong Recommendation — Rec 37–38, Table 10, ATA 2025</div>`;
+      html += `</div></div>`;
+    } else {
+      html += `</div></div>`;
     }
-    html += `</div></div>`;
 
   } else {
     // ── STATE B: RAI already given — completely different question ──────────
@@ -1636,29 +1816,70 @@ function generateReport() {
       html += `<div class="rec-strength">Rec 49, 58, ATA 2025 — Good Practice Statement + Conditional recommendation</div>`;
 
     } else if (response.cat === 'biochem') {
-      html += `<p><span class="highlight" style="color:var(--int-high);">Further RAI: Consider only if disease is RAI-avid and localisable</span></p>`;
-      html += `<p>Biochemically incomplete response (elevated Tg / rising TgAb with negative imaging) — empiric RAI has limited benefit without structural localisation. Key steps before considering repeat RAI:</p>`;
-      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
-        <li style="margin-bottom:5px;">Diagnostic <sup>123</sup>I WBS to assess RAI avidity and localise disease (Rec 49C)</li>
-        <li style="margin-bottom:5px;">SPECT-CT if any uptake found on planar WBS for anatomical correlation</li>
-        <li style="margin-bottom:5px;"><sup>18</sup>FDG-PET/CT if Tg &gt;10 ng/mL or negative RAI scan — identifies RAI-refractory or de-differentiated foci</li>
-        <li style="margin-bottom:5px;">If no uptake on diagnostic WBS despite structural disease → likely RAI-refractory; do NOT administer empiric RAI (Rec 59B)</li>
-        <li style="margin-bottom:5px;">If avid uptake localised → repeat therapeutic RAI may be appropriate (activity based on site: cervical 30–100 mCi; distant mets 100–200 mCi or dosimetry)</li>
-        <li>Note: second RAI in biochemically incomplete response — only 26.7% had normalised Tg at 1–2 years (Hirsch et al., retrospective). Evidence is low quality.</li>
-      </ul>`;
-      html += `<div class="rec-strength">Rec 49C, 53, 58, 59, ATA 2025 — Conditional recommendation, Low certainty evidence</div>`;
+      // Check whether WBS has already demonstrated RAI-avid disease
+      const avidUptake = postWBS === 'outside-bed' || postWBS === 'distant-uptake';
+      if (avidUptake) {
+        // RAI avidity already proven by scan — firm directive
+        const siteLabel = postWBS === 'distant-uptake' ? 'distant (chest/bone/other)' : 'locoregional (neck nodes)';
+        const activityRec = postWBS === 'distant-uptake' ? '100–200 mCi (3.7–7.4 GBq), or dosimetry-guided' : '100–150 mCi (3.7–5.55 GBq)';
+        html += `<div class="alert-box" style="background:var(--int-high-bg); border:1px solid var(--int-high); color:var(--int-high); padding:14px 16px; border-radius:9px; margin-bottom:12px; font-size:13px;">☢️ <strong>RAI-avid disease demonstrated on scan → THERAPEUTIC RAI IS INDICATED NOW.</strong></div>`;
+        html += `<p><span class="highlight" style="color:var(--int-high);">Immediate next step: Administer therapeutic RAI</span></p>`;
+        html += `<p>The diagnostic/whole-body scan shows iodine-avid uptake at a ${siteLabel} site. This converts a biochemically incomplete picture into <strong>localised, RAI-avid disease</strong> — the clearest indication for therapeutic <sup>131</sup>I. Empiric-RAI caveats (which apply to scan-NEGATIVE patients) do not apply here because avidity is proven.</p>`;
+        html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+          <li style="margin-bottom:5px;"><strong>Recommended activity: ${activityRec}</strong> for ${siteLabel} iodine-avid disease (Rec 55–57)</li>
+          <li style="margin-bottom:5px;">Obtain SPECT-CT for precise anatomical localisation before/with treatment</li>
+          <li style="margin-bottom:5px;">Confirm adequate TSH stimulation (>30 mIU/L) and low-iodine diet before dosing</li>
+          <li style="margin-bottom:5px;">Cross-sectional imaging (CT neck/chest) to map full disease extent prior to therapy${postWBS === 'distant-uptake' ? '; for diffuse pulmonary uptake, consider dosimetry to limit lung dose (&lt;80 mCi whole-body retention at 48h)' : ''}</li>
+          <li>Post-therapy WBS 5–7 days after treatment to confirm uptake and reassess</li>
+        </ul>`;
+        html += `<p style="font-size:12px; color:var(--text-dim);">Note: For isolated/limited locoregional nodal disease that is also surgically accessible, surgical resection may be preferred first-line; RAI is appropriate when surgery is not feasible or for multifocal/distant avid disease (Rec 53).</p>`;
+        html += `<div class="rec-strength">Rec 53, 55–57, ATA 2025 — therapeutic RAI for iodine-avid structural/locoregional disease</div>`;
+      } else {
+        // Scan-negative / unknown avidity — workup first
+        html += `<p><span class="highlight" style="color:var(--int-high);">Immediate next step: Localise disease before deciding on RAI</span></p>`;
+        html += `<p>Biochemically incomplete response (elevated Tg / rising TgAb) with no avid uptake demonstrated yet. The next step is to localise disease and assess RAI avidity — empiric RAI without localisation has limited benefit:</p>`;
+        html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+          <li style="margin-bottom:5px;"><strong>Diagnostic <sup>123</sup>I (or low-activity <sup>131</sup>I) WBS</strong> to assess RAI avidity and localise disease (Rec 49C)</li>
+          <li style="margin-bottom:5px;">SPECT-CT if any uptake found on planar WBS</li>
+          <li style="margin-bottom:5px;"><strong><sup>18</sup>FDG-PET/CT if Tg &gt;10 ng/mL</strong> or scan-negative — identifies RAI-refractory / de-differentiated foci</li>
+          <li style="margin-bottom:5px;"><strong>If avid uptake localised → therapeutic RAI is indicated</strong> (cervical 100–150 mCi; distant 100–200 mCi or dosimetry)</li>
+          <li style="margin-bottom:5px;">If no uptake despite structural disease → RAI-refractory; do NOT give empiric RAI (Rec 59B) → systemic therapy pathway</li>
+          <li>Empiric RAI in scan-negative biochemically incomplete disease: only 26.7% Tg normalisation (Hirsch et al.) — low-quality evidence</li>
+        </ul>`;
+        html += `<div class="rec-strength">Rec 49C, 53, 58, 59, ATA 2025 — Conditional recommendation, Low certainty evidence</div>`;
+      }
 
     } else if (response.cat === 'structural') {
-      html += `<p><span class="highlight" style="color:var(--high);">Further RAI: Only if disease is confirmed RAI-avid — multidisciplinary decision</span></p>`;
-      html += `<p>Structurally incomplete response — the key determinant for repeat RAI is <strong>RAI avidity of the structural disease</strong>, not initial risk category.</p>`;
-      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
-        <li style="margin-bottom:5px;"><strong>RAI-avid disease on post-therapy WBS</strong> → repeat therapeutic RAI appropriate. Activity: 100–150 mCi locoregional; 100–200 mCi or dosimetry for distant mets (Rec 55–57)</li>
-        <li style="margin-bottom:5px;"><strong>No RAI avidity on diagnostic scan + structural disease visible on imaging</strong> → RAI-refractory (RAIR) — do NOT administer further RAI (Rec 59B); refer for systemic therapy evaluation</li>
-        <li style="margin-bottom:5px;"><strong>Disease progression within 6 months of RAI despite prior uptake</strong> → RAIR criteria met; systemic therapy (MKI/targeted) should be considered (Rec 59–61)</li>
-        <li style="margin-bottom:5px;">For isolated cervical LN structural disease: surgical resection is preferred first-line; additional RAI may be considered after local therapy or if surgery is not feasible (Rec 53)</li>
-        <li>Second RAI for structural locoregional disease: limited benefit — only 17.6% resolution of nodes; 22.7% showed locoregional progression at 1–2 years (Hirsch et al.)</li>
-      </ul>`;
-      html += `<div class="rec-strength">Rec 53, 55–59, ATA 2025 — Conditional recommendation, Low certainty evidence; RAIR criteria: Good Practice Statement</div>`;
+      const avidUptake = postWBS === 'outside-bed' || postWBS === 'distant-uptake';
+      if (avidUptake) {
+        // Structural disease that is RAI-avid — firm directive
+        const siteLabel = postWBS === 'distant-uptake' ? 'distant (chest/bone/other)' : 'locoregional (neck/mediastinal nodes)';
+        const activityRec = postWBS === 'distant-uptake' ? '100–200 mCi (3.7–7.4 GBq), or dosimetry-guided' : '100–150 mCi (3.7–5.55 GBq)';
+        html += `<div class="alert-box" style="background:var(--high-bg); border:1px solid var(--high); color:var(--high); padding:14px 16px; border-radius:9px; margin-bottom:12px; font-size:13px;">☢️ <strong>RAI-avid structural disease demonstrated on scan → THERAPEUTIC RAI IS INDICATED NOW.</strong></div>`;
+        html += `<p><span class="highlight" style="color:var(--high);">Immediate next step: Administer therapeutic RAI</span></p>`;
+        html += `<p>The scan demonstrates iodine-avid structural disease at a ${siteLabel} site. Iodine-avid structural disease is a <strong>direct indication for therapeutic <sup>131</sup>I</strong> — the question of "whether the disease is avid" is already answered by the scan.</p>`;
+        html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+          <li style="margin-bottom:5px;"><strong>Recommended activity: ${activityRec}</strong> for ${siteLabel} iodine-avid disease (Rec 55–57)</li>
+          <li style="margin-bottom:5px;">SPECT-CT for anatomical localisation; cross-sectional CT to map extent before therapy</li>
+          <li style="margin-bottom:5px;">Adequate TSH stimulation (>30 mIU/L) ± low-iodine diet before dosing</li>
+          <li style="margin-bottom:5px;">${postWBS === 'distant-uptake' ? 'For diffuse pulmonary metastatic uptake → dosimetry-guided dosing to limit pulmonary/marrow toxicity' : 'For surgically accessible isolated cervical nodal disease → surgical resection may be preferred first-line (Rec 53); RAI when surgery not feasible or for mediastinal/multifocal avid disease'}</li>
+          <li>Post-therapy WBS 5–7 days after to confirm uptake and document response</li>
+        </ul>`;
+        html += `<p style="font-size:12px; color:var(--text-dim);"><strong>Re-treatment caveat:</strong> If structural disease later progresses within ~6–12 months despite avid uptake and adequate dosing, RAI-refractory criteria may be met → switch to systemic therapy (Rec 59–61). This caveat applies to subsequent failures, not to the first treatment of newly demonstrated avid disease.</p>`;
+        html += `<div class="rec-strength">Rec 53, 55–57, ATA 2025 — therapeutic RAI for iodine-avid structural disease (locoregional/distant)</div>`;
+      } else {
+        // Structural disease NOT shown to be avid (e.g. USG-suspicious node, no scan / non-avid)
+        html += `<p><span class="highlight" style="color:var(--high);">Immediate next step: Assess RAI avidity, then treat accordingly</span></p>`;
+        html += `<p>Structural disease is present but iodine avidity has not yet been demonstrated. The treatment pathway is determined by avidity:</p>`;
+        html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+          <li style="margin-bottom:5px;"><strong>Obtain diagnostic <sup>123</sup>I WBS + SPECT-CT</strong> (and/or <sup>18</sup>FDG-PET/CT) to determine avidity and full extent</li>
+          <li style="margin-bottom:5px;"><strong>If iodine-avid →</strong> therapeutic RAI: 100–150 mCi locoregional; 100–200 mCi or dosimetry for distant (Rec 55–57)</li>
+          <li style="margin-bottom:5px;"><strong>If non-avid on scan + structural disease →</strong> RAI-refractory (RAIR); do NOT give RAI (Rec 59B) → systemic therapy evaluation</li>
+          <li style="margin-bottom:5px;"><strong>Isolated/accessible cervical nodal disease →</strong> surgical resection preferred first-line (Rec 53); RAI when surgery not feasible</li>
+          <li style="margin-bottom:5px;"><strong>Progression within 6 months of RAI despite prior avidity →</strong> RAIR criteria met → systemic therapy (MKI/targeted, Rec 59–61)</li>
+        </ul>`;
+        html += `<div class="rec-strength">Rec 53, 55–59, ATA 2025 — Conditional recommendation, Low certainty evidence; RAIR: Good Practice Statement</div>`;
+      }
 
     } else {
       html += `<p>Response category could not be determined from the data entered. Classify response per Table 9 before making further RAI decisions.</p>`;
@@ -1666,11 +1887,107 @@ function generateReport() {
     html += `</div></div>`;
   }
 
+  // --- TENIS SYNDROME DETECTION + FDG-PET GUIDANCE ---
+  // TENIS = Thyroglobulin-Elevated Negative Iodine Scan:
+  //   elevated/rising Tg (or rising TgAb) WITH a negative diagnostic/post-therapy iodine WBS
+  //   and no localising structural disease on USG.
+  {
+    const tgValNum = parseFloat(document.getElementById('tgValue').value);
+    const wbsNegative = (postWBS === 'negative' || postWBS === 'thyroid-bed-only');
+    const usgNotStructural = (postUSG === 'negative' || postUSG === 'nonspecific' || postUSG === 'not-done');
+    const biochemActive = (response.cat === 'biochem') || (response.cat === 'structural' && wbsNegative) || (tgab === 'rising');
+    // Aggressive histology flag (FDG-avid, lower Tg may still mean disease)
+    const histoVal = document.getElementById('histology').value;
+    const aggressiveHisto = document.getElementById('aggressHisto').checked
+      || document.getElementById('poorlyDiff').checked
+      || histoVal === 'OTC' || histoVal === 'PTC-TCV' || histoVal === 'PTC-columnar';
+
+    const tenisPattern = biochemActive && wbsNegative && usgNotStructural;
+
+    if (tenisPattern) {
+      const tgHigh = !isNaN(tgValNum) && tgValNum > 10;
+      const fdgStronglyIndicated = tgHigh || aggressiveHisto || risk === 'high';
+
+      html += `<div class="section-divider"><span>⚑ TENIS Pattern Detected — Tg-Positive, Iodine-Scan-Negative</span></div>`;
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">⚑</span> TENIS Syndrome (Thyroglobulin-Elevated Negative Iodine Scan)</div><div class="follow-up-body">`;
+      html += `<div class="alert-box" style="background:var(--int-high-bg); border:1px solid var(--int-high); color:var(--int-high); padding:14px 16px; border-radius:9px; margin-bottom:12px; font-size:13px;">⚑ <strong>TENIS pattern present:</strong> elevated ${tgab === 'rising' ? 'TgAb' : 'thyroglobulin'} with a NEGATIVE iodine whole-body scan and no localising disease on neck ultrasound. This combination defines TENIS and changes the diagnostic strategy — further <em>blind</em> RAI is generally not the answer.</div>`;
+
+      if (fdgStronglyIndicated) {
+        html += `<p><span class="highlight" style="color:var(--int-high);">Immediate next step: <sup>18</sup>FDG-PET/CT</span></p>`;
+        html += `<p><sup>18</sup>FDG-PET/CT is the primary imaging modality in this setting (Rec 50A). Indicated here because: ${[tgHigh ? 'serum Tg >10 ng/mL' : '', aggressiveHisto ? 'aggressive/oncocytic histology (more FDG-avid, may produce little Tg)' : '', risk === 'high' ? 'high initial risk of recurrence' : ''].filter(Boolean).join('; ')}.</p>`;
+      } else {
+        html += `<p><span class="highlight" style="color:var(--int-high);">Next step: serial Tg trend ± <sup>18</sup>FDG-PET/CT</span></p>`;
+        html += `<p>With Tg in the lower-detectable range and no aggressive features, first confirm a rising trend (Tg doubling time). FDG-PET/CT becomes clearly indicated as Tg rises above ~10 ng/mL, if Tg doubling time is short, or if aggressive histology is identified (Rec 50A).</p>`;
+      }
+
+      html += `<ul style="margin:8px 0 8px 18px; font-size:13px; color:var(--text-muted);">
+        <li style="margin-bottom:5px;"><strong>FDG-PET/CT performance:</strong> meta-analysis of 17 studies (1195 pts) — sensitivity 0.86, specificity 0.84 in non-iodine-avid DTC. Sensitivity is higher with larger tumour burden, de-differentiation, and shorter Tg doubling time.</li>
+        <li style="margin-bottom:5px;"><strong>Also obtain:</strong> high-resolution neck USG (repeat), CT neck/chest with contrast — to find disease the iodine scan missed.</li>
+        <li style="margin-bottom:5px;"><strong>If FDG-PET/CT (and other imaging) localises disease →</strong> directed therapy: surgery, thermal/alcohol ablation, or EBRT for accessible lesions. FDG-avid disease is a negative predictor of RAI response.</li>
+        <li style="margin-bottom:5px;"><strong>If imaging localises disease that is NOT amenable to directed therapy →</strong> empiric RAI (100–200 mCi / 3.7–7.4 GBq) or dosimetry-guided may be considered, both to localise (post-therapy scan discloses disease in up to ~50%) and to treat unidentified disease (Rec 58).</li>
+        <li style="margin-bottom:5px;"><strong>If FDG-PET/CT is positive but iodine scan is negative (FDG+/RAI−) →</strong> this indicates RAI-refractory disease — empiric RAI is unlikely to benefit; manage per RAIR pathway (Rec 59): active surveillance for indolent disease, directed local therapy, or systemic therapy (MKI) for progressive/symptomatic disease.</li>
+        <li><strong>Empiric RAI in TENIS without localisation:</strong> low likelihood of long-term benefit — one series showed disease stability in 44% but progression in 56% despite empiric RAI (Rec 58). Reserve for after imaging workup.</li>
+      </ul>`;
+
+      if (tgab === 'rising') {
+        html += `<div class="info-box"><b>TgAb caveat:</b> With rising/persistent TgAb the "true" Tg cannot be reliably assessed. FDG-PET/CT may demonstrate disease even when Tg is uninterpretable — rising TgAb itself is a surrogate for biochemically incomplete response and warrants the same localisation workup.</div>`;
+      }
+
+      html += `<div class="rec-strength">Rec 50 (FDG-PET/CT), Rec 58 (empiric RAI in Tg+/scan−), Rec 59 (RAIR) — ATA 2025</div>`;
+      html += `</div></div>`;
+    }
+  }
+
+  // --- LOBECTOMY-SPECIFIC MONITORING CARD ---
+  if (surgery === 'lobectomy') {
+    html += `<div class="section-divider"><span>Post-Lobectomy Monitoring Plan</span></div>`;
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🩺</span> Surveillance After Thyroid Lobectomy / Hemithyroidectomy</div><div class="follow-up-body">`;
+    html += `<p>Lobectomy leaves a functioning contralateral lobe — this fundamentally changes follow-up. The remnant lobe produces thyroglobulin and maintains thyroid function, so the monitoring strategy differs substantially from total thyroidectomy.</p>`;
+
+    html += `<p><span class="highlight">1. Thyroid function & TSH target</span></p>`;
+    html += `<ul style="margin:6px 0 10px 18px; font-size:13px; color:var(--text-muted);">
+      <li style="margin-bottom:5px;">TSH goal is the <strong>normal reference range</strong> (Table 9) — NOT suppression. Target the lower half (≤2 mIU/L): TSH >1.85 mIU/L at 1 year was an independent recurrence risk factor in a 1047-patient lobectomy series.</li>
+      <li style="margin-bottom:5px;">Check TSH (with fT4) at <strong>6–8 weeks post-op</strong>, then every 6–12 months. If TSH rises above the normal reference range, start levothyroxine.</li>
+      <li style="margin-bottom:5px;">With a normal-range goal, ~70–80% of lobectomy patients can avoid thyroid hormone entirely. Higher risk of hypothyroidism if positive thyroid autoantibodies / underlying autoimmune thyroiditis — monitor more closely.</li>
+      <li>Thyroid hormone is most often started within the first 2 years, but in up to a quarter of patients it is started later — so continue periodic TSH checks indefinitely.</li>
+    </ul>`;
+
+    html += `<p><span class="highlight">2. Thyroglobulin — interpret with caution</span></p>`;
+    html += `<ul style="margin:6px 0 10px 18px; font-size:13px; color:var(--text-muted);">
+      <li style="margin-bottom:5px;">Routine serum Tg measurement after lobectomy is <strong>not recommended</strong> as a tumour marker (Rec 9, Rec 47D) — the intact remnant lobe secretes Tg, so an absolute value cannot distinguish normal lobe from disease.</li>
+      <li style="margin-bottom:5px;">If Tg is measured, a single value at 6–12 weeks with normal TSH gives a baseline; <strong>serial trend</strong> (rising over time on a stable assay) is more informative than any single cutoff. A markedly elevated or steadily rising Tg should prompt imaging and consideration of completion thyroidectomy.</li>
+      <li>TgAb: a rising TgAb trend on the same assay can still flag concern and warrants imaging.</li>
+    </ul>`;
+
+    html += `<p><span class="highlight">3. Neck ultrasound</span></p>`;
+    html += `<ul style="margin:6px 0 10px 18px; font-size:13px; color:var(--text-muted);">
+      <li style="margin-bottom:5px;">Neck USG is the <strong>primary surveillance tool</strong> after lobectomy. Obtain a post-operative baseline USG within 3–6 months.</li>
+      <li style="margin-bottom:5px;">Surveillance USG of the surgical bed, contralateral (remnant) lobe, and nodal compartments every 1–3 years, individualised to risk (more frequent for intermediate-risk features).</li>
+      <li>Recurrences after lobectomy mostly occur in the contralateral lobe and are usually salvageable with completion thyroidectomy. Monitor remnant-lobe nodules per ATA thyroid-nodule guidelines.</li>
+    </ul>`;
+
+    html += `<p><span class="highlight">4. RAI scanning</span></p>`;
+    html += `<p style="margin:6px 0 10px 0; font-size:13px; color:var(--text-muted);">Surveillance RAI whole-body scanning is <strong>not indicated</strong> after lobectomy — the remnant lobe outcompetes any disease for iodine uptake (Rec 49A, Good Practice Statement).</p>`;
+
+    html += `<p><span class="highlight">5. When to consider completion thyroidectomy ± RAI</span></p>`;
+    html += `<ul style="margin:6px 0 4px 18px; font-size:13px; color:var(--text-muted);">
+      <li style="margin-bottom:5px;">Final pathology reveals features that would have warranted total thyroidectomy (e.g. gross ETE, extensive nodal disease, aggressive histology, positive margins, vascular invasion in FTC)</li>
+      <li style="margin-bottom:5px;">Structurally documented recurrent/residual disease (in remnant lobe or nodes)</li>
+      <li style="margin-bottom:5px;">A clearly rising Tg/TgAb trend with imaging concern</li>
+      <li>Patient preference for the biochemical follow-up that total thyroidectomy + Tg enables</li>
+    </ul>`;
+    html += `<div class="rec-strength">Recs 9, 30, 45–47, 49A — ATA 2025; lobectomy TSH/recurrence data (Park et al., 1047 pts)</div>`;
+    html += `</div></div>`;
+  }
+
   // --- FOLLOW-UP PLAN ---
-  html += `<div class="section-divider"><span>Follow-up Plan & Surveillance Investigations</span></div>`;
-  followUpPlan.forEach(item => {
-    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">${item.icon}</span>${item.title}</div><div class="follow-up-body"><p>${item.body.replace(/\n/g,'<br>')}</p></div></div>`;
-  });
+  // For lobectomy, the dedicated card above replaces the generic per-modality plan to avoid duplication.
+  if (surgery !== 'lobectomy') {
+    html += `<div class="section-divider"><span>Follow-up Plan & Surveillance Investigations</span></div>`;
+    followUpPlan.forEach(item => {
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">${item.icon}</span>${item.title}</div><div class="follow-up-body"><p>${item.body.replace(/\n/g,'<br>')}</p></div></div>`;
+    });
+  }
 
   // --- DYNAMIC RISK STRATIFICATION NOTE ---
   html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🔄</span>Dynamic Risk Stratification (Ongoing Re-assessment)</div><div class="follow-up-body">`;

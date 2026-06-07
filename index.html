@@ -529,6 +529,12 @@
         </div>
 
         <div class="field">
+          <label>Largest Tumour Diameter (cm) <span style="color:var(--text-dim)">(optional — refines size-based concern)</span></label>
+          <input type="number" id="tumorSize" step="0.1" min="0" max="30" placeholder="e.g. 5.2" oninput="updateTumorSizePreview()">
+          <div class="info-box" id="tumorSizePreview" style="display:none;"></div>
+        </div>
+
+        <div class="field">
           <label>Extrathyroidal Extension (ETE)</label>
           <div class="toggle-group">
             <button class="toggle-btn" onclick="toggle(this,'ete','none')">None</button>
@@ -595,12 +601,17 @@
           <div class="grid-2">
             <div class="field">
               <label>Number of Positive Nodes</label>
-              <input type="number" id="posNodes" min="0" max="200" placeholder="e.g. 3">
+              <input type="number" id="posNodes" min="0" max="200" placeholder="e.g. 3" oninput="updateLnrPreview()">
             </div>
             <div class="field">
               <label>Largest Metastatic Node (cm)</label>
               <input type="number" id="nodeSize" step="0.1" min="0" max="20" placeholder="e.g. 1.5">
             </div>
+          </div>
+          <div class="field">
+            <label>Total Nodes Removed <span style="color:var(--text-dim)">(optional — enables lymph node ratio)</span></label>
+            <input type="number" id="totalNodes" min="0" max="200" placeholder="e.g. 12" oninput="updateLnrPreview()">
+            <div class="info-box" id="lnrPreview" style="display:none;"></div>
           </div>
           <div class="field">
             <label>Extranodal Extension (ENE)</label>
@@ -1355,6 +1366,31 @@ function updateLobectomyTgNote() {
   note.style.display = (surg && surg.value === 'lobectomy') ? 'block' : 'none';
 }
 
+// Live preview: tumour size concern band (#1)
+function updateTumorSizePreview() {
+  const box = document.getElementById('tumorSizePreview');
+  if (!box) return;
+  const v = parseFloat(document.getElementById('tumorSize').value);
+  if (isNaN(v) || v <= 0) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  if (v > 8) box.innerHTML = '<b>Major size concern (>8 cm).</b> Does not change ATA category but flags substantially higher clinical concern.';
+  else if (v > 6) box.innerHTML = '<b>Increased size concern (>6 cm).</b> Noted as a prognostic modifier; ATA category unchanged.';
+  else box.innerHTML = 'Size recorded. No additional size-based concern below 6 cm.';
+}
+
+// Live preview: lymph node ratio (#2)
+function updateLnrPreview() {
+  const box = document.getElementById('lnrPreview');
+  if (!box) return;
+  const pos = parseInt(document.getElementById('posNodes').value);
+  const tot = parseInt(document.getElementById('totalNodes').value);
+  if (isNaN(pos) || isNaN(tot) || tot <= 0) { box.style.display = 'none'; return; }
+  const r = pos / tot, pct = (r*100).toFixed(0);
+  box.style.display = 'block';
+  let band = r > 0.5 ? 'Unfavourable (>50%)' : (r >= 0.1 ? 'Intermediate (10–50%)' : 'Favourable (<10%)');
+  box.innerHTML = '<b>Lymph node ratio: ' + pct + '%</b> (' + pos + '/' + tot + ') — ' + band + '. Guideline cites LNR >0.3 as a higher-risk marker. Informational; does not change ATA category.';
+}
+
 function updateProgress() {
   for (let i = 1; i <= totalSteps; i++) {
     const el = document.getElementById('ps' + i);
@@ -1405,6 +1441,9 @@ function calcRisk() {
   const posNodes = parseInt(document.getElementById('posNodes').value) || 0;
   const nodeSize = parseFloat(document.getElementById('nodeSize').value) || 0;
   const surgery = document.getElementById('surgery').value;
+  const tumorSize = parseFloat(document.getElementById('tumorSize').value) || 0;
+  const totalNodes = parseInt(document.getElementById('totalNodes').value) || 0;
+  const lnr = (totalNodes > 0 && posNodes >= 0) ? (posNodes / totalNodes) : null;
 
   let risk = 'low'; // low, low-int, int-high, high
   let reasons = [];
@@ -1416,44 +1455,61 @@ function calcRisk() {
   if (margin === 'R2') { risk = 'high'; reasons.push('Gross residual disease (R2 resection)'); }
   if (poorlyDiff) { risk = 'high'; reasons.push('Poorly differentiated / high grade features'); }
   if (N !== 'N0' && nodeSize >= 3) { risk = 'high'; reasons.push('Metastatic lymph node ≥3 cm (cN1 ≥3 cm)'); }
-  if (N !== 'N0' && ene === 'macro' && posNodes >= 3) { risk = 'high'; reasons.push('Macroscopic extranodal extension with >3 positive nodes (~40% recurrence risk)'); }
+  // #4: Macro ENE alone is a strong adverse feature → high only when combined with extensive nodal burden
+  if (N !== 'N0' && ene === 'macro' && (posNodes >= 5 || (lnr !== null && lnr > 0.5))) { risk = 'high'; reasons.push('Macroscopic extranodal extension with extensive nodal burden (≥5 nodes or LNR >0.5) — high recurrence risk'); }
+  // #3: very high node count is a high-concern modifier
+  if (N !== 'N0' && posNodes >= 10) { risk = 'high'; reasons.push('Extensive nodal metastases (≥10 positive nodes) — high-concern modifier'); }
   if (widelyInvasive) { risk = 'high'; reasons.push('Widely invasive OTC (≥4 vessels or ≥4 foci capsular invasion with ETE)'); }
   if (angioinv === 'extensive') {
     if (risk !== 'high') risk = 'high';
     reasons.push('Extensive vascular invasion (≥4 vessels) — HIGH risk in FTC/OTC');
   }
-  if (T === 'T3a' && (ete === 'microscopic' || ete === 'strap')) { if (maxRisk(risk,'int-high') === 'high') {} else { if(risk!=='high') {risk='high'; reasons.push('T3a + ETE');} } }
+  // NOTE: Microscopic/minimal ETE no longer upstages to T3 (AJCC 8th ed) and is de-emphasised
+  // in ATA 2025 (does not independently drive recurrence). Gross ETE (T4) is handled above.
+  // T3a (>4 cm intrathyroidal) and strap-muscle invasion (T3b) are graded in the
+  // intermediate-high tier below, NOT forced to HIGH.
 
   // ========= INTERMEDIATE-HIGH RISK ==========
   if (risk !== 'high') {
     let intHigh = false;
     if (['T1a','T1b','T2','T3a'].includes(T) && N === 'N1b' && nodeSize > 0 && nodeSize < 3) { intHigh = true; reasons.push('Clinically evident lateral LN metastasis <3 cm'); }
-    if (N !== 'N0' && posNodes >= 3 && nodeSize < 3) { intHigh = true; reasons.push('Multiple nodal metastases (≥3 nodes)'); }
+    // #3: ≥5 positive nodes → intermediate-high (was ≥3, which over-called). 3–5 small nodes handled in low-int.
+    if (N !== 'N0' && posNodes >= 5 && posNodes < 10 && nodeSize < 3) { intHigh = true; reasons.push('Multiple nodal metastases (≥5 nodes) — intermediate-high'); }
+    // #2: high lymph node ratio is an adverse prognostic marker (guideline cites LNR >0.3)
+    if (lnr !== null && lnr > 0.5 && posNodes >= 3) { intHigh = true; reasons.push('High lymph node ratio (LNR >0.5) — unfavourable nodal burden'); }
     if (vascular === 'extensive') { intHigh = true; reasons.push('Extensive vascular invasion (≥4 vessels) — intermediate-high risk in PTC'); }
     if (aggressHisto) { intHigh = true; reasons.push('Aggressive histological subtype (tall cell, columnar, diffuse sclerosing, hobnail, solid)'); }
-    if (brafTert || rasTert) { intHigh = true; reasons.push('High-risk co-mutation (' + (brafTert?'BRAF V600E + TERT':'') + (rasTert?'RAS + TERT':'') + ') — significantly elevated recurrence risk'); }
-    if (N !== 'N0' && ene !== null && ene !== 'no') { intHigh = true; reasons.push('Extranodal extension in metastatic nodes'); }
+    // #5: BRAF+TERT softened — remains an adverse modifier nudging to intermediate-high, but with the
+    // explicit caveat that ATA 2025 does not mandate automatic escalation (uncertain in small DTCs).
+    if (brafTert || rasTert) { intHigh = true; reasons.push('High-risk co-mutation (' + (brafTert?'BRAF V600E + TERT':'') + (rasTert?'RAS + TERT':'') + ') — adverse molecular modifier (see caveat)'); }
+    // #4: micro-ENE → intermediate-high; macro-ENE → strong adverse (intermediate-high here, escalates to high with burden above)
+    if (N !== 'N0' && ene === 'micro') { intHigh = true; reasons.push('Microscopic extranodal extension'); }
+    if (N !== 'N0' && ene === 'macro') { intHigh = true; reasons.push('Macroscopic extranodal extension — strong adverse feature'); }
     if (margin === 'R1-post') { intHigh = true; reasons.push('Microscopically positive posterior margin (independent risk factor for recurrence)'); }
-    // T3a + multiple intermediate factors
-    if (T === 'T3a') { intHigh = true; reasons.push('T3a (>4 cm, intrathyroidal) — intermediate-high category'); }
+    // Strap-muscle (gross) ETE = T3b: intermediate-high, NOT high (Li et al. — not independently predictive after adjustment)
+    if (ete === 'strap' || T === 'T3b') { intHigh = true; reasons.push('Gross ETE into strap muscle (T3b) — intermediate-high category'); }
+    // T3a (>4 cm intrathyroidal): intermediate category. Higher end if combined with nodal disease.
+    if (T === 'T3a') { intHigh = true; reasons.push('Primary tumour >4 cm, intrathyroidal (T3a) — intermediate category'); }
     if (intHigh) risk = 'int-high';
   }
 
   // ========= LOW-INTERMEDIATE RISK =========
   if (risk === 'low') {
     let lowInt = false;
-    if (T === 'T3a' && N === 'N0' && ete === 'none') { lowInt = true; reasons.push('T3a intrathyroidal (some intermediate features)'); }
-    if (ete === 'strap') { lowInt = true; reasons.push('Strap muscle invasion (extrathyroidal extension into strap muscles)'); }
-    if (ete === 'microscopic') { lowInt = true; reasons.push('Microscopic ETE (minimal extrathyroidal extension) — low-intermediate'); }
+    // #3: 3–5 small nodes (<2 mm) → low-intermediate (was lumped into ≥3 int-high, which over-called)
+    if (N !== 'N0' && posNodes >= 3 && posNodes < 5 && nodeSize < 2) { lowInt = true; reasons.push('3–5 small nodal metastases (<2 mm) — low-intermediate'); }
     if (N === 'N1a' && posNodes <= 5 && nodeSize < 2) { lowInt = true; reasons.push('Central neck micrometastases (≤5 nodes, <2 mm) — low-intermediate'); }
     if (N === 'N1b' && posNodes <= 2 && nodeSize < 2) { lowInt = true; reasons.push('Limited lateral neck micrometastases'); }
     if (vascular === 'focal') { lowInt = true; reasons.push('Focal lymphovascular invasion (<4 vessels)'); }
-    if (focality === 'multifocal-bi') { lowInt = true; reasons.push('Bilateral multifocal disease'); }
+    // #9: bilateral multifocality downgraded — weak/inconsistent predictor; noted but minor
+    if (focality === 'multifocal-bi') { lowInt = true; reasons.push('Bilateral multifocal disease — weak/inconsistent predictor (minor modifier)'); }
     if (margin === 'R1-ant') { lowInt = true; reasons.push('Microscopically positive anterior margin'); }
     if (histo === 'FTC-minimally') { lowInt = true; reasons.push('Minimally invasive FTC — capsular invasion only (consider low-intermediate)'); }
     if (angioinv === 'limited') { lowInt = true; reasons.push('Limited vascular invasion (<4 vessels) in FTC/OTC — low-intermediate'); }
-    // Unilateral multifocality
-    if (focality === 'multifocal-uni' && N === 'N0') { lowInt = true; reasons.push('Unilateral multifocal disease'); }
+    // Microscopic/minimal ETE: minor modifier only — does NOT upstage to T3, de-emphasised in ATA 2025
+    if (ete === 'microscopic') { lowInt = true; reasons.push('Microscopic/minimal ETE — minor modifier (de-emphasised in ATA 2025; does not independently drive recurrence)'); }
+    // #9: unilateral multifocality — weak predictor, minor modifier
+    if (focality === 'multifocal-uni' && N === 'N0') { lowInt = true; reasons.push('Unilateral multifocal disease — weak predictor (minor modifier)'); }
     if (lowInt) risk = 'low-int';
   }
 
@@ -1472,7 +1528,55 @@ function calcRisk() {
     reasons.push('Aggressive PTC subtype upgrades to intermediate-high minimum');
   }
 
-  return { risk, reasons };
+  // ===== MODIFIERS (do NOT change ATA category — informational only) =====
+  const modifiers = [];
+  // #1: tumour size concern
+  if (tumorSize > 8) modifiers.push({ label: 'Large primary tumour (>8 cm: ' + tumorSize + ' cm)', level: 'major', note: 'Major size-related concern — bulkier tumours carry higher recurrence and complication risk independent of T category.' });
+  else if (tumorSize > 6) modifiers.push({ label: 'Sizeable primary tumour (>6 cm: ' + tumorSize + ' cm)', level: 'moderate', note: 'Increased size-related concern. T3a spans 4–>10 cm; larger tumours warrant closer attention.' });
+  // #2: lymph node ratio
+  if (lnr !== null) {
+    const pct = (lnr*100).toFixed(0);
+    if (lnr > 0.5) modifiers.push({ label: 'Lymph node ratio ' + pct + '% (' + posNodes + '/' + totalNodes + ')', level: 'major', note: 'Unfavourable LNR (>50%). Guideline cites LNR >0.3 as a higher-risk marker; >50% is strongly adverse.' });
+    else if (lnr >= 0.1) modifiers.push({ label: 'Lymph node ratio ' + pct + '% (' + posNodes + '/' + totalNodes + ')', level: 'moderate', note: 'Intermediate LNR (10–50%). Guideline cites LNR >0.3 as a marker of higher recurrence risk.' });
+    else modifiers.push({ label: 'Lymph node ratio ' + pct + '% (' + posNodes + '/' + totalNodes + ')', level: 'favorable', note: 'Favourable LNR (<10%) — low proportion of involved nodes.' });
+  }
+  // #5: molecular modifier caveat
+  if (brafTert || rasTert) modifiers.push({ label: 'Major adverse molecular modifier (' + (brafTert?'BRAF V600E + TERT':'RAS + TERT') + ')', level: 'major', note: 'ATA 2025 (Rec 28) describes this combination as correlating with worse prognosis, but does NOT mandate automatic category escalation — uncertain in smaller DTCs. Interpret alongside other features.' });
+
+  // ===== ADVERSE FEATURE LIST (#8) — descriptive, not a score =====
+  const adverse = [];
+  if (['T3a','T3b','T4a','T4b'].includes(T)) adverse.push(T);
+  if (ete === 'strap' || T === 'T3b') adverse.push('Gross ETE (strap)');
+  if (ete === 'gross' || ['T4a','T4b'].includes(T)) adverse.push('Gross ETE (major structures)');
+  if (ete === 'microscopic') adverse.push('Microscopic ETE');
+  if (N === 'N1a') adverse.push('N1a');
+  if (N === 'N1b') adverse.push('N1b');
+  if (posNodes >= 5) adverse.push('≥5 positive nodes');
+  if (lnr !== null && lnr > 0.5) adverse.push('LNR >50%');
+  if (ene === 'micro') adverse.push('Micro-ENE');
+  if (ene === 'macro') adverse.push('Macro-ENE');
+  if (nodeSize >= 3) adverse.push('Node ≥3 cm');
+  if (brafTert) adverse.push('BRAF+TERT');
+  if (rasTert) adverse.push('RAS+TERT');
+  if (aggressHisto) adverse.push('Aggressive subtype');
+  if (poorlyDiff) adverse.push('Poorly differentiated');
+  if (vascular === 'extensive' || angioinv === 'extensive') adverse.push('Extensive vascular invasion');
+  if (tumorSize > 6) adverse.push('Tumour >6 cm');
+  if (margin === 'R1-post') adverse.push('R1 posterior margin');
+  if (margin === 'R2') adverse.push('R2 (gross residual)');
+  if (M === 'M1') adverse.push('M1');
+
+  // ===== CONFIDENCE / RELIABILITY (#7) =====
+  const unknowns = [];
+  if (N !== 'N0' && !(nodeSize > 0)) unknowns.push('node size');
+  if (N !== 'N0' && (ene === null)) unknowns.push('ENE status');
+  if (!margin) unknowns.push('margin status');
+  if (N !== 'N0' && totalNodes === 0) unknowns.push('total nodes removed (LNR)');
+  let confidence = 'High';
+  if (unknowns.length === 1) confidence = 'Moderate';
+  else if (unknowns.length >= 2) confidence = 'Low';
+
+  return { risk, reasons, modifiers, adverse, confidence, unknowns, lnr, tumorSize };
 }
 
 function maxRisk(a, b) {
@@ -1541,17 +1645,24 @@ function calcResponse() {
         }
       }
     } else {
-      // Post TT without RAI
+      // Post TT, NO RAI yet — this is the INITIAL assessment, not dynamic response restratification.
+      // ATA response categories are designed for re-assessment AFTER initial therapy; applying the
+      // "biochemically incomplete RESPONSE" label here (and downstream TENIS/RAI-refractory logic)
+      // is conceptually premature. We instead describe the post-operative Tg and flag it for the
+      // initial RAI decision.
       if (!isNaN(tgVal)) {
-        if (tgVal < 2.5 && tgab !== 'rising' && postUSG !== 'suspicious') {
-          category = 'excellent'; label = 'Excellent Response';
-          detail = 'Nonstimulated Tg <2.5 ng/mL (post-TT without RAI), negative imaging — per Table 9';
-        } else if ((tgVal >= 2.5 && tgVal <= 5) || tgab === 'stable-declining' || postUSG === 'nonspecific') {
-          category = 'indeterminate'; label = 'Indeterminate Response';
-          detail = 'Nonstimulated Tg 2.5–5 ng/mL or stable/declining TgAb — continue monitoring';
-        } else if (tgVal > 5) {
-          category = 'biochem'; label = 'Biochemically Incomplete';
-          detail = 'Nonstimulated Tg >5 ng/mL (post-TT without RAI) with negative imaging';
+        if (tgVal < 0.2 && tgab !== 'rising' && postUSG !== 'suspicious') {
+          category = 'excellent'; label = 'Undetectable post-op Tg';
+          detail = 'Nonstimulated Tg <0.2 ng/mL with negative imaging — excellent biochemical status. (Formal response category is assigned after initial therapy is complete.)';
+        } else if (tgVal < 1 && tgab !== 'rising' && postUSG !== 'suspicious') {
+          category = 'excellent'; label = 'Low post-op Tg';
+          detail = 'Nonstimulated Tg <1 ng/mL, negative imaging — low post-operative Tg. Reassess after initial therapy decision.';
+        } else if ((tgVal >= 1 && tgVal <= 10) || tgab === 'stable-declining' || postUSG === 'nonspecific') {
+          category = 'indeterminate'; label = 'Indeterminate post-op Tg';
+          detail = 'Detectable post-operative Tg (1–10 ng/mL) or nonspecific findings. Interpretation depends on timing (early post-op Tg falls over weeks), stimulation status, and neck USG. Informs the initial RAI decision rather than a dynamic response category.';
+        } else if (tgVal > 10) {
+          category = 'biochem'; label = 'Elevated post-op Tg';
+          detail = 'Elevated post-operative Tg (>10 ng/mL) with negative imaging. Persistent biochemical evidence of disease — evaluate timing and stimulation status; localise with imaging and factor into the initial RAI strategy. (Not equivalent to a dynamic "biochemically incomplete response," which is assigned after initial therapy.)';
         }
       }
     }
@@ -1824,7 +1935,7 @@ function generateReport() {
     return;
   }
 
-  const { risk, reasons } = calcRisk();
+  const { risk, reasons, modifiers, adverse, confidence, unknowns, lnr } = calcRisk();
   const response = calcResponse();
   const surgery = document.getElementById('surgery').value;
   const T = document.getElementById('tCategory').value;
@@ -2033,10 +2144,15 @@ function generateReport() {
       evidence: 'Lang et al. (638 pts with DTC, 100 with +ve margins): positive posterior margin — 11.6% recurrence vs 3.6% for anterior margin. Posterior margin positivity was an independent risk factor (HR 22.95, p<0.0001). Mercado et al.: recurrence-free survival 71% (positive margins) vs 90% (negative margins). Note: microscopically positive margins (R1) were NOT part of 2015 ATA risk stratification but are incorporated in 2025.',
       source: 'Rec 28, ATA 2025; Lang et al.; Mercado et al.'
     },
-    'T3a (>4 cm, intrathyroidal) — intermediate-high category': {
-      tier: 'int-high', recurrence: '12–16%',
-      evidence: 'T3a (tumour >4 cm confined to thyroid): Chereau et al. — >4 cm without ETE: 12% recurrence; >4 cm with microscopic ETE: 48% recurrence. T3a alone (no other risk factors) places patient in intermediate-high category per Fig. 2. Multiple retrospective analyses confirm size >4 cm as an independent predictor of structural recurrence.',
+    'Primary tumour >4 cm, intrathyroidal (T3a) — intermediate category': {
+      tier: 'int-high', recurrence: '~12%',
+      evidence: 'T3a (tumour >4 cm confined to thyroid, no ETE): Chereau et al. reported ~12% recurrence for >4 cm without ETE. Size >4 cm is a recognised intermediate-risk modifier (Fig. 2). Actual recurrence risk is strongly influenced by accompanying nodal burden, ENE, and histology — T3a size alone is an intermediate, not high-risk, feature.',
       source: 'Fig. 2, ATA 2025; Chereau et al.; Rec 28'
+    },
+    'Gross ETE into strap muscle (T3b) — intermediate-high category': {
+      tier: 'int-high', recurrence: '5–25.9%',
+      evidence: 'Gross ETE limited to strap muscle (T3b): systematic review/meta-analysis found local recurrence 5–25.9% with significant heterogeneity — higher than no ETE but lower than gross invasion of major structures (T4a). Li et al. (4045 pts): strap invasion associated with multifocality, LN involvement and distant mets, but NOT independently predictive of recurrence after multivariable adjustment. Places patient in intermediate-high, not high, risk.',
+      source: 'Rec 28, ATA 2025; Li et al.; systematic review cited'
     },
 
     // LOW-INTERMEDIATE risk justifications
@@ -2045,10 +2161,10 @@ function generateReport() {
       evidence: 'Strap muscle invasion (T3b, gross ETE limited to strap muscles): systematic review and meta-analysis found local recurrence rate 5–25.9% with significant heterogeneity. Higher risk than no ETE but lower than gross invasion into major structures (T4a). Li et al. (4045 pts): strap muscle invasion in 22.5% — associated with multifocality, LN involvement, and distant mets but NOT independently with recurrence after multivariable adjustment.',
       source: 'Rec 28, ATA 2025; systematic review cited; Li et al.'
     },
-    'Microscopic ETE (minimal extrathyroidal extension) — low-intermediate': {
-      tier: 'low-int', recurrence: '3–14%',
-      evidence: 'Microscopic (minimal) ETE: Danilovic et al. (596 pts, prospective): 14% recurrence in patients with minimal ETE. Diker-Cohen meta-analysis (13 studies): 7% recurrence with minimal ETE in tumours >1 cm — within low-risk range. Seifert et al. (721 T1a pts): 13.1% LN recurrence with minimal ETE vs 1.25% without. Note: AJCC 8th Ed removed microscopic ETE from T3 staging, but ATA 2025 retains it in risk stratification.',
-      source: 'Rec 28, ATA 2025; Danilovic et al.; Diker-Cohen meta-analysis'
+    'Microscopic/minimal ETE — minor modifier (de-emphasised in ATA 2025; does not independently drive recurrence)': {
+      tier: 'low-int', recurrence: '~7%',
+      evidence: 'Microscopic/minimal ETE: AJCC 8th Ed REMOVED microscopic ETE from T3 staging. ATA 2025 explicitly de-emphasises it — minimal/microscopic ETE no longer promotes tumours to T3 and does not, on its own, mandate completion thyroidectomy or escalation (guideline text). Diker-Cohen meta-analysis: ~7% recurrence with minimal ETE in tumours >1 cm — within the low-risk range. It is at most a minor low-intermediate modifier, NOT a driver of high risk.',
+      source: 'ATA 2025 guideline text; AJCC 8th Ed; Diker-Cohen meta-analysis'
     },
     'Central neck micrometastases (≤5 nodes, <2 mm) — low-intermediate': {
       tier: 'low-int', recurrence: '10–15%',
@@ -2175,8 +2291,42 @@ function generateReport() {
 
   html += `</div></div>`;
 
-  // --- RESPONSE CRITERIA ---
-  html += `<div class="section-divider"><span>Response to Initial Therapy — ATA Criteria (Table 9)</span></div>`;
+  // --- ADVERSE FEATURE LIST (#8) ---
+  if (adverse && adverse.length) {
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">📋</span> Adverse Features Present</div><div class="follow-up-body">`;
+    html += `<div style="display:flex; flex-wrap:wrap; gap:8px;">` +
+      adverse.map(a => `<span class="tag tag-int-high">✓ ${a}</span>`).join('') + `</div>`;
+    html += `<p style="font-size:11px; color:var(--text-dim); margin-top:12px;">A descriptive checklist of adverse features identified — not a numeric score. ATA risk is a category judgement integrating these features, not a count.</p>`;
+    html += `</div></div>`;
+  }
+
+  // --- PROGNOSTIC MODIFIERS (#1 size, #2 LNR, #5 molecular) ---
+  if (modifiers && modifiers.length) {
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">⚖️</span> Prognostic Modifiers (do not change ATA category)</div><div class="follow-up-body">`;
+    modifiers.forEach(m => {
+      const col = m.level === 'major' ? 'var(--high)' : (m.level === 'moderate' ? 'var(--int-high)' : 'var(--low)');
+      html += `<div style="border-left:3px solid ${col}; padding:4px 0 4px 12px; margin-bottom:12px;">
+        <p style="font-size:13px; font-weight:600; color:${col}; margin-bottom:3px;">${m.label}</p>
+        <p style="font-size:12px; color:var(--text-muted);">${m.note}</p>
+      </div>`;
+    });
+    html += `<p style="font-size:11px; color:var(--text-dim);">These refine clinical concern within a category. They are informational and do not, on their own, reclassify the ATA risk tier.</p>`;
+    html += `</div></div>`;
+  }
+
+  // --- CONFIDENCE / RELIABILITY (#7) ---
+  {
+    const confCol = confidence === 'High' ? 'var(--low)' : (confidence === 'Moderate' ? 'var(--int-high)' : 'var(--high)');
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🎚️</span> Risk Estimate Reliability</div><div class="follow-up-body">`;
+    html += `<p style="font-size:14px; font-weight:600; color:${confCol}; margin-bottom:6px;">${confidence}</p>`;
+    if (unknowns && unknowns.length) {
+      html += `<p style="font-size:12px; color:var(--text-muted);">Reliability reduced because the following were not provided: <strong>${unknowns.join(', ')}</strong>. Entering these will sharpen the classification.</p>`;
+    } else {
+      html += `<p style="font-size:12px; color:var(--text-muted);">All key staging variables (node size, ENE, margins${'\u0020'}) were provided — estimate is well-supported by the entered data.</p>`;
+    }
+    html += `</div></div>`;
+  }
+
   const responseBodies = {
     'excellent': { cls: 'response-excellent', title: '✓ Excellent Response', detail: 'No clinical, biochemical or structural evidence of disease. Probability of remaining free of disease is very high. De-escalation of monitoring is appropriate for low/low-intermediate risk disease.' },
     'indeterminate': { cls: 'response-indeterminate', title: '◎ Indeterminate Response', detail: 'Nonspecific biochemical or structural findings that cannot be confidently classified as benign or malignant. Includes stable/declining TgAb without definitive structural disease. Continue monitoring; response will likely reclassify over time.' },
@@ -2409,7 +2559,11 @@ function generateReport() {
       || document.getElementById('poorlyDiff').checked
       || histoVal === 'OTC' || histoVal === 'PTC-TCV' || histoVal === 'PTC-columnar';
 
-    const tenisPattern = biochemActive && wbsNegative && usgNotStructural;
+    // TENIS (Tg-Elevated, Negative Iodine Scan) is by definition a POST-RAI-evaluation concept:
+    // it requires a prior iodine scan/therapy that came back negative. It must NOT fire for a
+    // patient who has never received RAI / had a diagnostic iodine scan.
+    const raiEvaluated = (raiGiven && raiGiven !== 'no');
+    const tenisPattern = raiEvaluated && biochemActive && wbsNegative && usgNotStructural;
 
     if (tenisPattern) {
       const tgHigh = !isNaN(tgValNum) && tgValNum > 10;
@@ -2546,6 +2700,8 @@ function generateReport() {
       margin: state.margin, ene: state.ene, angioinv: state.angioinv,
       posNodes: document.getElementById('posNodes').value,
       nodeSize: document.getElementById('nodeSize').value,
+      totalNodes: document.getElementById('totalNodes').value,
+      tumorSize: document.getElementById('tumorSize').value,
       aggressHisto: document.getElementById('aggressHisto').checked,
       poorlyDiff: document.getElementById('poorlyDiff').checked,
       widelyInvasive: document.getElementById('widelyInvasive').checked,
@@ -3233,6 +3389,8 @@ function generateReturningVisit() {
   setFieldValue('patientAge', f.age);
   setFieldValue('posNodes', f.posNodes || '');
   setFieldValue('nodeSize', f.nodeSize || '');
+  setFieldValue('totalNodes', f.totalNodes || '');
+  setFieldValue('tumorSize', f.tumorSize || '');
   setFieldValue('tgValue', tgVal);
   setCheckbox('aggressHisto', f.aggressHisto);
   setCheckbox('poorlyDiff', f.poorlyDiff);
@@ -3340,7 +3498,13 @@ function appendVisitTrend(key) {
     const first = tgs[0], last = tgs[tgs.length-1];
     const dir = last > first*1.2 ? 'rising' : (last < first*0.8 ? 'declining' : 'stable');
     const dirColor = dir==='rising' ? 'var(--high)' : (dir==='declining' ? 'var(--low)' : 'var(--text-muted)');
-    h += `<p style="margin-top:10px;font-size:13px;"><b>Tg trajectory:</b> <span style="color:${dirColor};font-weight:600;">${dir}</span> (${first} → ${last} ng/mL across series).${dir==='rising'?' A rising Tg trend warrants imaging workup; consider calculating Tg doubling time.':''}</p>`;
+    h += `<p style="margin-top:10px;font-size:13px;"><b>Tg trajectory:</b> <span style="color:${dirColor};font-weight:600;">${dir}</span> (${first} → ${last} ng/mL across series).</p>`;
+    // #6: rising Tg despite negative imaging — prominent alert
+    const latestVisit = series[series.length-1];
+    const imagingNeg = (latestVisit.postUSG === 'negative' || latestVisit.postUSG === 'not-done' || !latestVisit.structural || /complete|no structural/i.test(latestVisit.structural||''));
+    if (dir === 'rising') {
+      h += `<div class="alert-box" style="background:var(--high-bg, rgba(239,68,68,0.1)); border:1px solid var(--high); color:var(--high); padding:12px 14px; border-radius:9px; margin-top:10px; font-size:13px;">⚠ <strong>Rising Tg trend${imagingNeg ? ' despite negative/unremarkable imaging' : ''}.</strong> A biochemical trajectory that is rising${imagingNeg ? ' without a structural correlate' : ''} warrants active investigation — repeat/extend imaging (neck USG, cross-sectional, consider FDG-PET if Tg &gt;10 or aggressive histology) and calculate Tg doubling time. A single value is far less informative than this trend.</div>`;
+    }
   }
   h += `<p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Note: Tg values are only directly comparable when measured on the same assay and same stimulation status (LT4 vs stimulated).</p>`;
   h += `</div></div>`;

@@ -558,7 +558,7 @@
         <div class="card-header">Surgical Details</div>
         <div class="field">
           <label>Extent of Surgery <span class="required-asterisk">*</span></label>
-          <select id="surgery">
+          <select id="surgery" onchange="updateLobectomyTgNote()">
             <option value="">— Select —</option>
             <option value="total">Total / Near-Total Thyroidectomy</option>
             <option value="lobectomy">Thyroid Lobectomy / Hemithyroidectomy</option>
@@ -754,6 +754,9 @@
           <input type="number" id="tgValue" step="0.01" min="0" placeholder="e.g. 0.15">
           <div class="info-box">
             <b>Reference:</b> Assay sensitivity should be ≤0.1 ng/mL. If TgAb positive, Tg is unreliable (may be falsely low).
+          </div>
+          <div class="info-box" id="lobectomyTgNote" style="display:none; background:var(--moderate-bg, rgba(245,158,11,0.08)); border-color:var(--moderate-border, rgba(245,158,11,0.3));">
+            <b>After lobectomy:</b> routine Tg measurement is <b>not recommended</b> as a tumour marker (Rec 9, 47D) — the intact remnant lobe secretes Tg, so a single value cannot distinguish normal lobe from disease. If measured, only the <b>trend</b> over time (rising on a stable assay) is informative. You may leave this blank; neck ultrasound is the primary surveillance tool here.
           </div>
         </div>
 
@@ -1307,7 +1310,16 @@ function goStep(n) {
   document.getElementById('step' + n).classList.add('active');
   currentStep = n;
   updateProgress();
+  updateLobectomyTgNote();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Show the lobectomy Tg note only when surgery is lobectomy
+function updateLobectomyTgNote() {
+  const note = document.getElementById('lobectomyTgNote');
+  if (!note) return;
+  const surg = document.getElementById('surgery');
+  note.style.display = (surg && surg.value === 'lobectomy') ? 'block' : 'none';
 }
 
 function updateProgress() {

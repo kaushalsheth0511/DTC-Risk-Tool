@@ -168,6 +168,19 @@
   /* DIVIDER */
   .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
+  /* MODE SELECTOR */
+  .mode-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .mode-card {
+    text-align: left; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px 24px; cursor: pointer;
+    transition: all var(--transition); font-family: 'Sora', sans-serif;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .mode-card:hover { border-color: var(--accent); background: var(--accent-glow); transform: translateY(-2px); }
+  .mode-icon { font-size: 26px; margin-bottom: 4px; }
+  .mode-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .mode-desc { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+
   /* ======= RESULT SECTION ======= */
   #result-section { display: none; }
 
@@ -334,6 +347,36 @@
     color: var(--text-dim); margin-top: 8px; padding-top: 8px;
     border-top: 1px solid var(--border);
   }
+
+  /* ======= PRINT / PDF ======= */
+  @media print {
+    @page { margin: 14mm; size: A4; }
+    body { background: #fff !important; color: #000 !important; }
+    body::before { display: none !important; }
+    /* Hide everything except the result section */
+    #mode-selector, #patient-info, #form-section, #recurrence-section,
+    #returning-section, #progressBar, .btn-row, #savedCasesPanel,
+    #caseSavedStatus { display: none !important; }
+    .wrapper { max-width: 100% !important; padding: 0 !important; }
+    /* Flatten cards for print */
+    .result-banner, .snapshot, .result-card, .follow-up-card, .mgmt-card,
+    .pathway-box, .drug-table, .info-box, .alert-box {
+      box-shadow: none !important;
+      border: 1px solid #ccc !important;
+      background: #fff !important;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .risk-title, .banner-title { color: #000 !important; }
+    .snapshot-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    a { color: #000 !important; text-decoration: none !important; }
+    /* Force readable text */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-divider span { color: #333 !important; }
+    /* Show a print header */
+    #printHeader { display: block !important; }
+  }
+  #printHeader { display: none; }
 </style>
 </head>
 <body>
@@ -352,8 +395,87 @@
     </div>
   </div>
 
+  <!-- MODE SELECTOR -->
+  <div id="mode-selector">
+    <!-- PATIENT SEARCH -->
+    <div class="card" style="margin-bottom:22px;">
+      <div class="card-header">🔍 Returning patient? Search existing records</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="field" style="flex:1; min-width:200px; margin-bottom:0;">
+          <label>Search by initials, mobile number, or MRN / Patient ID</label>
+          <input type="text" id="patientSearch" placeholder="e.g. K.S. or 98XXXXXXXX or ADEC-1234" onkeydown="if(event.key==='Enter') runPatientSearch();">
+        </div>
+        <button class="btn btn-primary" onclick="runPatientSearch()">Search</button>
+      </div>
+      <div id="searchResults" style="margin-top:14px;"></div>
+    </div>
+
+    <div style="text-align:center; margin-bottom:24px;">
+      <div class="step-label" style="text-align:center;">New assessment — select clinical context</div>
+      <div class="step-title" style="text-align:center;">What stage of care is this assessment for?</div>
+    </div>
+    <div class="mode-grid">
+      <button class="mode-card" onclick="setMode('initial')">
+        <div class="mode-icon">🔬</div>
+        <div class="mode-title">Initial Assessment</div>
+        <div class="mode-desc">First risk stratification after primary surgery (± RAI). Enter the full dataset once — histology, TNM, surgery, response. Establishes ATA risk, response category, TSH target, and follow-up plan. This is the baseline visit a returning patient is matched against.</div>
+      </button>
+      <button class="mode-card" onclick="setMode('followup')">
+        <div class="mode-icon">📈</div>
+        <div class="mode-title">Follow-up Restratification (new patient / no stored baseline)</div>
+        <div class="mode-desc">Dynamic restratification when you do NOT have a stored prior visit to load. Full form, framed as current values. If the patient already exists in records, use the search above instead — it carries over their fixed data.</div>
+      </button>
+      <button class="mode-card" onclick="setMode('recurrence')">
+        <div class="mode-icon">⚠️</div>
+        <div class="mode-title">Recurrent / Persistent Disease</div>
+        <div class="mode-desc">A documented new structural recurrence or persistent disease event. Focused pathway: recurrence site, size, RAI-avidity, resectability → management per Recs 53–61.</div>
+      </button>
+    </div>
+    <div class="info-box" style="margin-top:18px; text-align:left;">
+      <b>Returning patient:</b> search above → loads their fixed baseline data → you enter only the new visit's changing values (Tg, TgAb, imaging, scan, time since surgery) → fresh restratification appended to their visit history with a trend comparison.<br><br>
+      <b>Follow-up Restratification mode</b> is for a patient with no stored baseline (e.g. first time using the tool for an established patient) — it asks for the full dataset.
+    </div>
+  </div>
+
+  <!-- PATIENT INFO SCREEN (shown after stage-of-care selection) -->
+  <div id="patient-info" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+      <div class="step-label" id="patInfoStageLabel">Patient details</div>
+      <button onclick="backToMode()" style="background:none; border:none; color:var(--accent); font-family:'Sora',sans-serif; font-size:12px; cursor:pointer; padding:0;">↩ Change clinical context</button>
+    </div>
+    <div class="step-title">Patient Details <span style="font-size:14px; font-weight:400; color:var(--text-dim);">(all optional)</span></div>
+
+    <div class="card">
+      <div class="card-header">Identifiers — optional, stored only in this browser</div>
+      <div class="field">
+        <label>Name <span style="color:var(--text-dim)">(optional — full name, first name, or initials)</span></label>
+        <input type="text" id="patName" maxlength="60" placeholder="e.g. K. Sheth or Kaushal S.">
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Mobile Number <span style="color:var(--text-dim)">(optional)</span></label>
+          <input type="text" id="patMobile" maxlength="20" placeholder="e.g. 98XXXXXXXX">
+        </div>
+        <div class="field">
+          <label>MRN / Patient ID <span style="color:var(--text-dim)">(optional)</span></label>
+          <input type="text" id="patMRN" maxlength="30" placeholder="e.g. ADEC-1234">
+        </div>
+      </div>
+      <div class="info-box">
+        The tool works fully without any of these. Adding a name, mobile, or MRN lets you search and reload this patient at the next visit so unchanged baseline data carries over.
+      </div>
+      <div class="info-box" style="background:var(--moderate-bg, rgba(245,158,11,0.08)); border-color:var(--moderate-border, rgba(245,158,11,0.3));">
+        <b>Patient data & consent.</b> Identifiers and clinical values you enter are stored to enable follow-up comparison and sync across your devices. Enter only the minimum needed, obtain appropriate patient consent per local data-protection rules, and avoid full names where initials suffice. Do not enter data on shared/public computers. You are responsible for the confidentiality of any identifiable information entered.
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="proceedFromPatientInfo()">Continue →</button>
+    </div>
+  </div>
+
   <!-- PROGRESS BAR -->
-  <div class="progress-bar" id="progressBar">
+  <div class="progress-bar" id="progressBar" style="display:none;">
     <div class="progress-step active" id="ps1"></div>
     <div class="progress-step" id="ps2"></div>
     <div class="progress-step" id="ps3"></div>
@@ -362,11 +484,14 @@
   </div>
 
   <!-- FORM SECTION -->
-  <div id="form-section">
+  <div id="form-section" style="display:none;">
 
     <!-- STEP 1: Tumor & Surgery -->
     <div class="step-section active" id="step1">
-      <div class="step-label">Step 1 of 5</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+        <div class="step-label" id="step1Label">Step 1 of 5</div>
+        <button onclick="backToPatientInfo()" style="background:none; border:none; color:var(--accent); font-family:'Sora',sans-serif; font-size:12px; cursor:pointer; padding:0;">↩ Patient details</button>
+      </div>
       <div class="step-title">Tumor Characteristics & Surgery</div>
 
       <div class="card">
@@ -385,24 +510,18 @@
           </select>
         </div>
 
-        <div class="grid-2">
-          <div class="field">
-            <label>Tumor Size (largest dimension, cm) <span class="required-asterisk">*</span></label>
-            <input type="number" id="tumorSize" step="0.1" min="0" max="20" placeholder="e.g. 2.5">
-          </div>
-          <div class="field">
-            <label>T Category (AJCC 8th Ed) <span class="required-asterisk">*</span></label>
-            <select id="tCategory">
-              <option value="">— Select —</option>
-              <option value="T1a">T1a (≤1 cm, confined to thyroid)</option>
-              <option value="T1b">T1b (>1 cm, ≤2 cm, confined)</option>
-              <option value="T2">T2 (>2 cm, ≤4 cm, confined)</option>
-              <option value="T3a">T3a (>4 cm, confined to thyroid)</option>
-              <option value="T3b">T3b (gross ETE into strap muscles, any size)</option>
-              <option value="T4a">T4a (gross ETE into major structures)</option>
-              <option value="T4b">T4b (gross ETE into prevertebral fascia / encasing vessels)</option>
-            </select>
-          </div>
+        <div class="field">
+          <label>T Category (AJCC 8th Ed) <span class="required-asterisk">*</span></label>
+          <select id="tCategory">
+            <option value="">— Select —</option>
+            <option value="T1a">T1a (≤1 cm, confined to thyroid)</option>
+            <option value="T1b">T1b (>1 cm, ≤2 cm, confined)</option>
+            <option value="T2">T2 (>2 cm, ≤4 cm, confined)</option>
+            <option value="T3a">T3a (>4 cm, confined to thyroid)</option>
+            <option value="T3b">T3b (gross ETE into strap muscles, any size)</option>
+            <option value="T4a">T4a (gross ETE into major structures)</option>
+            <option value="T4b">T4b (gross ETE into prevertebral fascia / encasing vessels)</option>
+          </select>
         </div>
 
         <div class="field">
@@ -469,14 +588,10 @@
         </div>
 
         <div id="node-details" class="hidden">
-          <div class="grid-3">
+          <div class="grid-2">
             <div class="field">
               <label>Number of Positive Nodes</label>
               <input type="number" id="posNodes" min="0" max="200" placeholder="e.g. 3">
-            </div>
-            <div class="field">
-              <label>Total Nodes Examined</label>
-              <input type="number" id="totalNodes" min="0" max="200" placeholder="e.g. 12">
             </div>
             <div class="field">
               <label>Largest Metastatic Node (cm)</label>
@@ -557,19 +672,9 @@
 
       <div class="card">
         <div class="card-header">Patient Demographics</div>
-        <div class="grid-2">
-          <div class="field">
-            <label>Age at Diagnosis (years) <span class="required-asterisk">*</span></label>
-            <input type="number" id="patientAge" min="18" max="100" placeholder="e.g. 48">
-          </div>
-          <div class="field">
-            <label>Sex</label>
-            <select id="patientSex">
-              <option value="">— Select —</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-            </select>
-          </div>
+        <div class="field">
+          <label>Age at Diagnosis (years) <span class="required-asterisk">*</span></label>
+          <input type="number" id="patientAge" min="18" max="100" placeholder="e.g. 48">
         </div>
         <div class="info-box">
           Age ≥55 years triggers AJCC 8th Ed Stage II (any T, any N, M0). Age is not an independent ATA Risk of Recurrence predictor, but age ≥55 is associated with worse response in intermediate/high-risk disease.
@@ -585,27 +690,7 @@
     <!-- STEP 3: Post-op Imaging -->
     <div class="step-section" id="step3">
       <div class="step-label">Step 3 of 5</div>
-      <div class="step-title">Pre-operative Imaging & Post-operative Imaging</div>
-
-      <div class="card">
-        <div class="card-header">Pre-operative Imaging Findings</div>
-        <div class="field">
-          <label>Pre-op Neck Ultrasound</label>
-          <div class="toggle-group">
-            <button class="toggle-btn" onclick="toggle(this,'preUSG','done-clear')">Done — No suspicious nodes</button>
-            <button class="toggle-btn" onclick="toggle(this,'preUSG','done-suspicious')">Done — Suspicious lateral/central nodes</button>
-            <button class="toggle-btn" onclick="toggle(this,'preUSG','not-done')">Not performed</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>Pre-op CT Neck/Chest</label>
-          <div class="toggle-group">
-            <button class="toggle-btn" onclick="toggle(this,'preCT','done-clear')">Done — No distant metastasis</button>
-            <button class="toggle-btn" onclick="toggle(this,'preCT','done-mets')">Done — Distant metastasis identified</button>
-            <button class="toggle-btn" onclick="toggle(this,'preCT','not-done')">Not performed</button>
-          </div>
-        </div>
-      </div>
+      <div class="step-title">Post-operative Imaging</div>
 
       <div class="card">
         <div class="card-header">Post-operative Imaging (6–12 weeks after surgery)</div>
@@ -686,14 +771,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">Current TSH Status</div>
-        <div class="field">
-          <label>Current Serum TSH (mIU/L)</label>
-          <input type="number" id="tshValue" step="0.01" min="0" placeholder="e.g. 0.8">
-        </div>
-      </div>
-
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
         <button class="btn btn-primary" onclick="goStep(5)">Next: Clinical Context →</button>
@@ -738,24 +815,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">Additional Clinical Context</div>
-        <div class="field">
-          <label>Any prior structural recurrence or re-operation?</label>
-          <div class="toggle-group">
-            <button class="toggle-btn" onclick="toggle(this,'priorRecurrence','no')">No</button>
-            <button class="toggle-btn" onclick="toggle(this,'priorRecurrence','yes')">Yes</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>Patient anxiety / preference for intensive follow-up?</label>
-          <div class="toggle-group">
-            <button class="toggle-btn" onclick="toggle(this,'patientPref','standard')">Standard monitoring acceptable</button>
-            <button class="toggle-btn" onclick="toggle(this,'patientPref','intensive')">Patient prefers intensive monitoring</button>
-          </div>
-        </div>
-      </div>
-
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goStep(4)">← Back</button>
         <button class="btn btn-primary" onclick="generateReport()">🔍 Generate Risk Assessment</button>
@@ -764,8 +823,233 @@
 
   </div><!-- /form-section -->
 
+  <!-- RECURRENCE FORM SECTION -->
+  <div id="recurrence-section" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+      <div class="step-label">Recurrent / Persistent Disease</div>
+      <button onclick="backToPatientInfo()" style="background:none; border:none; color:var(--accent); font-family:'Sora',sans-serif; font-size:12px; cursor:pointer; padding:0;">↩ Patient details</button>
+    </div>
+    <div class="step-title">Recurrence Management Pathway</div>
+    <div class="info-box" style="margin-bottom:18px;">This pathway applies the ATA 2025 management algorithm for structurally identified recurrent or persistent disease (Recs 53–61). Acute management is driven mainly by the recurrent lesion's characteristics. Original histology, if known, refines RAI-avidity expectations and targeted-therapy choice — but it is <b>optional</b>: the tool answers fully without it.</div>
+
+    <div class="card">
+      <div class="card-header">Original Tumour Histology <span style="text-transform:none; color:var(--text-dim); font-family:'Sora',sans-serif; letter-spacing:0;">— optional, if known</span></div>
+      <div class="field">
+        <label>Original histological type (from first surgery, if available)</label>
+        <select id="recOrigHisto">
+          <option value="">— Not available / unknown —</option>
+          <option value="PTC">PTC — classical</option>
+          <option value="PTC-TCV">PTC — Tall Cell Variant</option>
+          <option value="PTC-columnar">PTC — Columnar / Diffuse Sclerosing / Hobnail / Solid</option>
+          <option value="FVPTC-encapsulated">PTC — Encapsulated FVPTC / IEFVPTC</option>
+          <option value="FTC-minimally">FTC — Minimally invasive</option>
+          <option value="FTC-extensive">FTC — Widely / extensively invasive</option>
+          <option value="OTC">OTC — Oncocytic carcinoma</option>
+          <option value="poorly-diff">Poorly differentiated</option>
+        </select>
+        <div class="info-box">Aggressive subtypes (tall cell, columnar, OTC, poorly differentiated) predict lower RAI avidity and stronger FDG-PET utility (Rec 50A). Leave blank if this is a first visit and the original report is not on hand — management will proceed regardless.</div>
+      </div>
+      <div class="field">
+        <label>Known molecular driver from original specimen (optional)</label>
+        <div class="check-row">
+          <label class="check-item"><input type="checkbox" id="recOrigBRAFTERT"> <span>BRAF V600E + TERT (or other high-risk co-mutation)</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Recurrence Type</div>
+      <div class="field">
+        <label>Pattern of recurrence / persistent disease <span class="required-asterisk">*</span></label>
+        <div class="toggle-group" style="flex-direction:column; align-items:stretch;">
+          <button class="toggle-btn" style="text-align:left;" onclick="toggle(this,'recType','locoregional')">Locoregional — neck node(s) or thyroid bed</button>
+          <button class="toggle-btn" style="text-align:left;" onclick="toggle(this,'recType','distant')">Distant metastatic — lung, bone, or other</button>
+          <button class="toggle-btn" style="text-align:left;" onclick="toggle(this,'recType','biochemical')">Biochemical only — rising Tg/TgAb, no structural disease found</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOCOREGIONAL DETAILS -->
+    <div class="card recType-block" id="block-locoregional" style="display:none;">
+      <div class="card-header">Locoregional Recurrence Details</div>
+      <div class="field">
+        <label>Largest recurrent node — smallest diameter (mm)</label>
+        <input type="number" id="recNodeSize" step="1" min="0" max="100" placeholder="e.g. 12">
+        <div class="info-box">Central compartment nodes &lt;8 mm and lateral nodes &lt;10 mm in smallest dimension may be candidates for active surveillance rather than immediate surgery (analogous to FNA thresholds, Rec 53/surveillance principles).</div>
+      </div>
+      <div class="field">
+        <label>Surgical resectability</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recResectable','resectable')">Resectable</button>
+          <button class="toggle-btn" onclick="toggle(this,'recResectable','not-resectable')">Not resectable</button>
+          <button class="toggle-btn" onclick="toggle(this,'recResectable','prior-surgery')">Prior neck surgery (reoperative field)</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Extranodal extension / soft tissue or aerodigestive invasion</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recENE','no')">No</button>
+          <button class="toggle-btn" onclick="toggle(this,'recENE','yes')">Yes — ENE / soft-tissue / structural invasion</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Disease tempo</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recTempo','stable')">Stable / indolent</button>
+          <button class="toggle-btn" onclick="toggle(this,'recTempo','progressive')">Progressive</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISTANT DETAILS -->
+    <div class="card recType-block" id="block-distant" style="display:none;">
+      <div class="card-header">Distant Metastatic Disease Details</div>
+      <div class="field">
+        <label>Site(s) of distant metastases (select all)</label>
+        <div class="check-row">
+          <label class="check-item"><input type="checkbox" id="recMetLung"> <span>Lung / pulmonary</span></label>
+          <label class="check-item"><input type="checkbox" id="recMetBone"> <span>Bone</span></label>
+          <label class="check-item"><input type="checkbox" id="recMetBrain"> <span>Brain / CNS</span></label>
+          <label class="check-item"><input type="checkbox" id="recMetOther"> <span>Other (liver, distant nodes)</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Disease burden / distribution</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recBurden','oligometastatic')">Oligometastatic (few, localisable)</button>
+          <button class="toggle-btn" onclick="toggle(this,'recBurden','diffuse')">Diffuse / multifocal</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Disease tempo</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recTempo','stable')">Asymptomatic / stable / minimally progressive</button>
+          <button class="toggle-btn" onclick="toggle(this,'recTempo','progressive')">Progressive (RECIST) / symptomatic</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RAI AVIDITY (shared by locoregional + distant) -->
+    <div class="card recType-block recRAI-block" id="block-rai" style="display:none;">
+      <div class="card-header">RAI Avidity & Refractory Status</div>
+      <div class="field">
+        <label>Iodine avidity of the recurrent/metastatic disease</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'recAvidity','avid')">RAI-avid (uptake on diagnostic/post-therapy scan)</button>
+          <button class="toggle-btn" onclick="toggle(this,'recAvidity','non-avid')">Non-avid (no uptake despite structural disease)</button>
+          <button class="toggle-btn" onclick="toggle(this,'recAvidity','unknown')">Not yet assessed</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>RAI-refractory (RAIR) criteria — any present?</label>
+        <div class="check-row">
+          <label class="check-item"><input type="checkbox" id="rairNoUptake"> <span>Structural disease that never concentrated RAI (no uptake at first therapy)</span></label>
+          <label class="check-item"><input type="checkbox" id="rairLostUptake"> <span>Loss of iodine uptake after previously demonstrating avidity</span></label>
+          <label class="check-item"><input type="checkbox" id="rairMixed"> <span>Uptake in some lesions but not others (heterogeneous)</span></label>
+          <label class="check-item"><input type="checkbox" id="rairProgressed"> <span>Progression within ~6–12 months despite RAI uptake (or cumulative &gt;22 GBq/600 mCi)</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Molecular profile (if known — guides targeted therapy)</label>
+        <div class="check-row">
+          <label class="check-item"><input type="checkbox" id="molNTRK"> <span>NTRK fusion</span></label>
+          <label class="check-item"><input type="checkbox" id="molRET"> <span>RET fusion</span></label>
+          <label class="check-item"><input type="checkbox" id="molALK"> <span>ALK fusion</span></label>
+          <label class="check-item"><input type="checkbox" id="molBRAF"> <span>BRAF V600E</span></label>
+          <label class="check-item"><input type="checkbox" id="molNone"> <span>No actionable driver / not tested</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="justify-content:space-between;">
+      <button class="btn btn-secondary" onclick="backToModeFromRecurrence()">← Change context</button>
+      <button class="btn btn-primary" onclick="generateRecurrenceReport()">🔍 Generate Management Plan</button>
+    </div>
+  </div><!-- /recurrence-section -->
+
+  <!-- RETURNING PATIENT FOLLOW-UP (slim form) -->
+  <div id="returning-section" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+      <div class="step-label">Follow-up visit</div>
+      <button onclick="backToModeFromReturning()" style="background:none; border:none; color:var(--accent); font-family:'Sora',sans-serif; font-size:12px; cursor:pointer; padding:0;">↩ Change clinical context</button>
+    </div>
+    <div class="step-title">New Follow-up Visit — <span id="returningPatientLabel" style="color:var(--accent);">Patient</span></div>
+
+    <div class="card" style="background:var(--surface2);">
+      <div class="card-header">Carried-over baseline (fixed data)</div>
+      <div id="returningBaseline" style="font-size:12px; color:var(--text-muted); line-height:1.9;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">This visit — enter current values only</div>
+      <div class="field">
+        <label>Time since primary surgery (current)</label>
+        <select id="ret_timeSurgery">
+          <option value="3to12m">3–12 months</option>
+          <option value="1to2y">1–2 years</option>
+          <option value="2to5y">2–5 years</option>
+          <option value="gt5y">More than 5 years</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Tg assay context</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'ret_tgContext','on-LT4')">Non-stimulated (on LT4)</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_tgContext','stimulated')">Stimulated</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Current Serum Thyroglobulin (Tg) (ng/mL)</label>
+        <input type="number" id="ret_tgValue" step="0.01" min="0" placeholder="e.g. 0.15">
+      </div>
+      <div class="field">
+        <label>Current Anti-Tg Antibodies (TgAb)</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'ret_tgab','negative')">Negative / Undetectable</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_tgab','stable-declining')">Positive — Stable/Declining</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_tgab','rising')">Positive — Rising</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Current Neck Ultrasound</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'ret_postUSG','negative')">No suspicious findings</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postUSG','nonspecific')">Nonspecific</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postUSG','suspicious')">Suspicious</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postUSG','not-done')">Not done this visit</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Current RAI Whole Body Scan (if done this visit)</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'ret_postWBS','not-done')">Not done</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postWBS','negative')">Negative</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postWBS','thyroid-bed-only')">Bed only</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postWBS','outside-bed')">Uptake outside bed</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_postWBS','distant-uptake')">Distant uptake</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="justify-content:space-between;">
+      <button class="btn btn-secondary" onclick="backToModeFromReturning()">← Cancel</button>
+      <button class="btn btn-primary" onclick="generateReturningVisit()">🔍 Restratify This Visit</button>
+    </div>
+  </div><!-- /returning-section -->
+
   <!-- RESULT SECTION -->
   <div id="result-section">
+
+    <div id="printHeader" style="text-align:center; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid #000;">
+      <div style="font-size:18px; font-weight:700;">ADEC — Arham Diabetes and Endocrine Clinic</div>
+      <div style="font-size:13px;">Differentiated Thyroid Cancer — Risk Stratification & Follow-up (ATA 2025)</div>
+      <div style="font-size:11px; margin-top:4px;" id="printMeta"></div>
+    </div>
+
+    <div id="caseIdBar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:10px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; margin-bottom:14px;">
+      <div style="font-size:12px; font-family:'DM Mono',monospace; color:var(--text-muted);">Case ID: <span id="caseIdValue" style="color:var(--accent); font-weight:600;">—</span></div>
+      <div style="font-size:11px; color:var(--text-dim);" id="caseSavedStatus"></div>
+    </div>
 
     <div id="resultBanner" class="result-banner">
       <div class="risk-label">ATA 2025 — Risk of Structural Recurrence</div>
@@ -817,21 +1101,157 @@
 
     <div class="btn-row" style="justify-content:space-between; flex-wrap:wrap; gap:12px;">
       <button class="btn btn-reset" onclick="resetAll()">↺ Start New Assessment</button>
-      <button class="btn btn-primary" onclick="goStep(1); document.getElementById('result-section').style.display='none'; document.getElementById('form-section').style.display='block'; document.getElementById('progressBar').style.display='flex';">✏️ Edit Inputs</button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="saveCurrentCase()">💾 Save case</button>
+        <button class="btn btn-secondary" onclick="printResult()">🖨 Print / PDF</button>
+        <button class="btn btn-secondary" onclick="exportAllCasesCSV()">⬇ Export all (CSV)</button>
+        <button class="btn btn-secondary" onclick="showSavedCases()">📁 Saved cases</button>
+        <button class="btn btn-primary" onclick="editInputs()">✏️ Edit Inputs</button>
+      </div>
+    </div>
+
+    <!-- SAVED CASES PANEL -->
+    <div id="savedCasesPanel" style="display:none; margin-top:18px;">
+      <div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">📁</span> Saved Cases (this browser only)</div><div class="follow-up-body" id="savedCasesBody">
+        <p style="color:var(--text-dim);">No cases saved yet.</p>
+      </div></div>
     </div>
 
   </div><!-- /result-section -->
 
+  <!-- GLOBAL FOOTER -->
+  <div style="margin-top:40px; padding-top:20px; border-top:1px solid var(--border); text-align:center;">
+    <p style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+      Published by <strong style="color:var(--text-muted);">ADEC (Arham Diabetes and Endocrine Clinic)</strong> — Dr Kaushal Sheth.<br>
+      For feedback, email <a href="mailto:arham.endocrinology@gmail.com" style="color:var(--accent); text-decoration:none;">arham.endocrinology@gmail.com</a>
+    </p>
+    <p style="font-size:10px; color:var(--text-dim); margin-top:10px; line-height:1.6;">
+      Clinical decision support tool based on the 2025 ATA Management Guidelines for Adult Patients with DTC. For use by qualified clinicians alongside clinical judgment; not a substitute for individualized care.<br>
+      Saved cases sync across your devices when cloud storage is configured; otherwise they are stored only in this browser. Export to CSV any time for a portable copy.
+    </p>
+  </div>
+
 </div><!-- /wrapper -->
+
+<!-- ===== FIREBASE (cloud sync) ===== -->
+<!--
+  HOW TO ENABLE CROSS-DEVICE SYNC (one-time setup, ~10 min):
+  1. Go to https://console.firebase.google.com → "Add project" → name it (e.g. "adec-dtc") → create.
+  2. In the project, click the </> (Web) icon to "Add app" → register app → it shows a firebaseConfig object.
+  3. Copy the values into FIREBASE_CONFIG below (apiKey, authDomain, projectId, etc.).
+  4. In the left menu: Build → Firestore Database → "Create database" → Start in *production mode* → pick a location.
+  5. Firestore → Rules tab → paste these rules so anyone with the link can read/write the cases collection
+     (simple shared clinic log — see note about security below), then Publish:
+
+         rules_version = '2';
+         service cloud.firestore {
+           match /databases/{database}/documents {
+             match /dtc_cases/{doc} {
+               allow read, write: if true;
+             }
+             match /dtc_meta/{doc} {
+               allow read, write: if true;
+             }
+           }
+         }
+
+  6. Save this file and re-upload to GitHub. Done — cases now sync across all your devices.
+
+  SECURITY NOTE: "allow ... if true" means anyone who has your project config can read/write.
+  For a private clinic tool this is usually acceptable if you don't share the URL widely, but it is
+  NOT HIPAA/GDPR-grade. For stricter control, enable Firebase Authentication and tighten the rules
+  to "if request.auth != null". Ask and I can wire in a simple email/password login.
+
+  If FIREBASE_CONFIG is left blank, the tool automatically falls back to this-browser-only storage.
+-->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ====== PASTE YOUR FIREBASE CONFIG HERE ======
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBQ0qbEilASe0SjTw-UhwMve53JD2UbRcM",
+  authDomain: "dtc-risk-assessment.firebaseapp.com",
+  projectId: "dtc-risk-assessment",
+  storageBucket: "dtc-risk-assessment.firebasestorage.app",
+  messagingSenderId: "609598436050",
+  appId: "1:609598436050:web:44847e83fcdd9cd342f30b",
+  measurementId: "G-B7FSYKHNH9"
+};
+// =============================================
+let FB = { enabled:false, db:null };
+(function initFirebase(){
+  try {
+    if (FIREBASE_CONFIG.projectId && typeof firebase !== 'undefined') {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      FB.db = firebase.firestore();
+      FB.enabled = true;
+      console.log('Firebase sync enabled.');
+    } else {
+      console.log('Firebase not configured — using local storage only.');
+    }
+  } catch(e) { console.warn('Firebase init failed, using local storage:', e); FB.enabled=false; }
+})();
+</script>
 
 <script>
 // ========== STATE ==========
+let assessMode = null; // 'initial' | 'followup' | 'recurrence'
 let state = {
   ete: null, focality: null, vascular: null, margin: null, mstatus: 'M0',
   ene: null, tgContext: null, tgab: null, raiGiven: null, postUSG: null,
-  postWBS: null, preUSG: null, preCT: null, angioinv: null, priorRecurrence: null,
-  patientPref: null
+  postWBS: null, angioinv: null,
+  // recurrence pathway
+  recType: null, recResectable: null, recENE: null, recTempo: null,
+  recBurden: null, recAvidity: null,
+  // returning-patient follow-up
+  ret_tgContext: null, ret_tgab: null, ret_postUSG: null, ret_postWBS: null
 };
+
+// ========== MODE SELECTION ==========
+// Single source of truth for screen visibility — hides all, shows only requested
+function showScreen(show, opts) {
+  opts = opts || {};
+  const all = ['mode-selector','patient-info','form-section','recurrence-section','returning-section','result-section'];
+  all.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
+  const pb = document.getElementById('progressBar');
+  if (pb) pb.style.display = opts.progress ? 'flex' : 'none';
+  (Array.isArray(show) ? show : [show]).forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = 'block';
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setMode(mode) {
+  assessMode = mode;
+  const stageNames = { initial:'Initial assessment', followup:'Follow-up restratification', recurrence:'Recurrent / persistent disease' };
+  const lbl = document.getElementById('patInfoStageLabel');
+  if (lbl) lbl.textContent = stageNames[mode] || 'Patient details';
+  showScreen('patient-info');
+}
+
+function proceedFromPatientInfo() {
+  if (assessMode === 'recurrence') {
+    showScreen('recurrence-section');
+  } else {
+    currentStep = 1;
+    const lbl = document.getElementById('step1Label');
+    if (lbl) lbl.textContent = (assessMode === 'followup') ? 'Follow-up restratification · Step 1 of 5' : 'Step 1 of 5';
+    showScreen('form-section', { progress: true });
+  }
+}
+
+function backToPatientInfo() {
+  showScreen('patient-info');
+}
+
+function backToModeFromRecurrence() {
+  showScreen('mode-selector');
+}
+
+function backToMode() {
+  assessMode = null;
+  showScreen('mode-selector');
+}
 
 function toggle(el, key, value) {
   document.querySelectorAll('[onclick*="toggle(this,\'' + key + '\'"]').forEach(b => b.classList.remove('active'));
@@ -851,6 +1271,20 @@ function toggle(el, key, value) {
       note.style.display = 'block';
       note.innerHTML = '<b>Intermediate-High:</b> Focal vascular invasion (&lt;4 vessels) is associated with increased risk of distant metastasis (HR 2.5) and is a low-intermediate to intermediate-high risk feature.';
     } else { note.style.display = 'none'; }
+  }
+
+  // Recurrence type — show relevant detail blocks
+  if (key === 'recType') {
+    document.querySelectorAll('.recType-block').forEach(b => b.style.display = 'none');
+    if (value === 'locoregional') {
+      document.getElementById('block-locoregional').style.display = 'block';
+      document.getElementById('block-rai').style.display = 'block';
+    } else if (value === 'distant') {
+      document.getElementById('block-distant').style.display = 'block';
+      document.getElementById('block-rai').style.display = 'block';
+    } else if (value === 'biochemical') {
+      // biochemical-only: no structural detail / RAI-avidity-of-lesion block needed
+    }
   }
 }
 
@@ -1328,6 +1762,23 @@ function getFollowUpPlan(risk, response, timeSurgery, raiGiven, surgery) {
 
 // ========== GENERATE REPORT ==========
 function generateReport() {
+  // ---- Input validation: require essential fields ----
+  const histoCheck = document.getElementById('histology').value;
+  const tCheck = document.getElementById('tCategory').value;
+  const surgeryCheck = document.getElementById('surgery').value;
+  const missing = [];
+  if (!histoCheck) missing.push('Histological type (Step 1)');
+  if (!tCheck) missing.push('T category (Step 1)');
+  if (!surgeryCheck) missing.push('Extent of surgery (Step 1)');
+  if (!state.postUSG) missing.push('Post-op neck ultrasound status (Step 3)');
+  if (!state.tgContext && surgeryCheck !== 'lobectomy') missing.push('Tg assay context (Step 4)');
+  const tgEntered = document.getElementById('tgValue').value;
+  if (!state.tgab) missing.push('Anti-Tg antibody (TgAb) status (Step 4)');
+  if (missing.length) {
+    alert('Please complete these required fields before generating the assessment:\n\n• ' + missing.join('\n• '));
+    return;
+  }
+
   const { risk, reasons } = calcRisk();
   const response = calcResponse();
   const surgery = document.getElementById('surgery').value;
@@ -1367,6 +1818,17 @@ function generateReport() {
   banner.className = 'result-banner ' + rd.cls;
   document.getElementById('riskTitle').textContent = rd.title;
   document.getElementById('riskSub').textContent = rd.sub;
+  // ensure AJCC/response grid is visible (recurrence mode hides it)
+  const rg = document.querySelector('.result-grid'); if (rg) rg.style.display = 'grid';
+  const sh = document.querySelector('#snapshotPanel .snapshot-head'); if (sh) sh.textContent = '⬡ At-a-glance summary';
+  // reset snapshot labels (recurrence mode renames them)
+  const snLabels = document.querySelectorAll('#snapshotPanel .snap-label');
+  if (snLabels.length >= 4) {
+    snLabels[0].textContent = 'Risk of Recurrence';
+    snLabels[1].textContent = 'Structural Status';
+    snLabels[2].textContent = 'Biochemical Status';
+    snLabels[3].textContent = 'TSH Target';
+  }
 
   // ===== AT-A-GLANCE SNAPSHOT =====
   // 1. Risk chip
@@ -2020,16 +2482,792 @@ function generateReport() {
 
   document.getElementById('resultContent').innerHTML = html;
 
+  // ---- Build case record for save/export ----
+  const pName = (document.getElementById('patName') ? document.getElementById('patName').value : '' || '').trim();
+  const mobile = (document.getElementById('patMobile') ? document.getElementById('patMobile').value : '' || '').trim();
+  const mrn = (document.getElementById('patMRN') ? document.getElementById('patMRN').value : '' || '').trim();
+  currentCase = {
+    id: genCaseId(),
+    patientKey: makePatientKey(pName, mobile, mrn),
+    name: pName, initials: pName, mobile: mobile, mrn: mrn,
+    date: new Date().toLocaleDateString('en-CA'),
+    mode: assessMode || 'initial',
+    // fixed (baseline) data — carried over on follow-up
+    fixed: {
+      histologyValue: document.getElementById('histology').value,
+      histology: histroPretty,
+      T: T, N: N, M: M, surgery: surgery, age: age,
+      ete: state.ete, focality: state.focality, vascular: state.vascular,
+      margin: state.margin, ene: state.ene, angioinv: state.angioinv,
+      posNodes: document.getElementById('posNodes').value,
+      nodeSize: document.getElementById('nodeSize').value,
+      aggressHisto: document.getElementById('aggressHisto').checked,
+      poorlyDiff: document.getElementById('poorlyDiff').checked,
+      widelyInvasive: document.getElementById('widelyInvasive').checked,
+      brafTert: document.getElementById('brafTert').checked,
+      rasTert: document.getElementById('rasTert').checked,
+      risk: risk
+    },
+    histology: histroPretty,
+    T: T, N: N, M: M, surgery: surgery, age: age,
+    risk: rc.label, ajcc: ajcc.stage,
+    response: response.label, structural: structStatus, biochem: biochemStatus,
+    tsh: tshInfo.target,
+    timeSurgery: timeSurgery,
+    tgValue: document.getElementById('tgValue').value,
+    tgContext: state.tgContext, tgab: state.tgab,
+    raiGiven: raiGiven, postWBS: postWBS, postUSG: postUSG,
+    recType: '', recAvidity: '', primaryAction: ''
+  };
+  document.getElementById('caseIdValue').textContent = currentCase.id;
+  document.getElementById('caseSavedStatus').textContent = 'Not yet saved — click “Save case” to store locally';
+  document.getElementById('caseSavedStatus').style.color = 'var(--text-dim)';
+  document.getElementById('savedCasesPanel').style.display = 'none';
+
   // Switch views
-  document.getElementById('form-section').style.display = 'none';
-  document.getElementById('result-section').style.display = 'block';
-  document.getElementById('progressBar').style.display = 'none';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showScreen('result-section');
+}
+
+// ========== RECURRENCE REPORT ==========
+function generateRecurrenceReport() {
+  const recType = state.recType;
+  if (!recType) { alert('Please select the pattern of recurrence.'); return; }
+
+  const resectable = state.recResectable;
+  const ene = state.recENE;
+  const tempo = state.recTempo;
+  const burden = state.recBurden;
+  const avidity = state.recAvidity;
+  const nodeSize = parseFloat(document.getElementById('recNodeSize').value);
+
+  const rair = {
+    noUptake: document.getElementById('rairNoUptake').checked,
+    lostUptake: document.getElementById('rairLostUptake').checked,
+    mixed: document.getElementById('rairMixed').checked,
+    progressed: document.getElementById('rairProgressed').checked
+  };
+  const isRAIR = rair.noUptake || rair.lostUptake || rair.mixed || rair.progressed;
+  const mol = {
+    ntrk: document.getElementById('molNTRK').checked,
+    ret: document.getElementById('molRET').checked,
+    alk: document.getElementById('molALK').checked,
+    braf: document.getElementById('molBRAF').checked,
+    none: document.getElementById('molNone').checked
+  };
+  // Original histology (optional) — refines FDG/RAI-avidity expectations
+  const origHisto = document.getElementById('recOrigHisto').value;
+  const origAggressive = ['PTC-TCV','PTC-columnar','OTC','poorly-diff','FTC-extensive'].includes(origHisto);
+  const origBRAFTERT = document.getElementById('recOrigBRAFTERT').checked;
+
+  // Banner
+  const banner = document.getElementById('resultBanner');
+  let bCls = 'int-high', bTitle = '', bSub = '';
+  if (recType === 'distant') { bCls = 'high'; bTitle = 'DISTANT METASTATIC RECURRENCE'; bSub = 'Management per Recs 55–61 — RAI if avid; systemic therapy if RAIR & progressive.'; }
+  else if (recType === 'locoregional') { bCls = 'int-high'; bTitle = 'LOCOREGIONAL RECURRENCE'; bSub = 'Management per Recs 53–54 — surgery preferred for resectable disease.'; }
+  else { bCls = 'int-high'; bTitle = 'BIOCHEMICAL RECURRENCE'; bSub = 'Rising Tg/TgAb without localised structural disease — localise before treating.'; }
+  banner.className = 'result-banner ' + bCls;
+  document.getElementById('riskTitle').textContent = bTitle;
+  document.getElementById('riskSub').textContent = bSub;
+
+  // Snapshot — reuse cells with recurrence-relevant labels
+  document.querySelector('#snapshotPanel .snapshot-head').textContent = '⬡ Recurrence summary';
+  const setSnap = (id, cls, txt, sub) => {
+    const e = document.getElementById(id); if(!e) return;
+    e.className = 'snap-chip ' + cls; e.textContent = txt;
+    const s = document.getElementById(id+'Sub') || document.getElementById(id.replace('snap','snap')+'Sub');
+  };
+  // relabel snapshot cells
+  const labels = document.querySelectorAll('#snapshotPanel .snap-label');
+  if (labels.length >= 4) {
+    labels[0].textContent = 'Recurrence Type';
+    labels[1].textContent = 'RAI Avidity';
+    labels[2].textContent = 'RAIR Status';
+    labels[3].textContent = 'Primary Action';
+  }
+  const typeLabel = recType === 'distant' ? 'Distant' : (recType === 'locoregional' ? 'Locoregional' : 'Biochemical');
+  document.getElementById('snapRisk').className = 'snap-chip ' + (recType==='distant'?'snap-high':'snap-int-high');
+  document.getElementById('snapRisk').textContent = typeLabel;
+  document.getElementById('snapRiskSub').textContent = recType==='biochemical' ? 'No structural disease' : (tempo==='progressive'?'Progressive':'Stable/indolent');
+
+  const avidLabel = avidity==='avid'?'RAI-avid':(avidity==='non-avid'?'Non-avid':'Unknown');
+  document.getElementById('snapStructural').className = 'snap-chip ' + (avidity==='avid'?'snap-low':(avidity==='non-avid'?'snap-high':'snap-blue'));
+  document.getElementById('snapStructural').textContent = avidLabel;
+  document.getElementById('snapStructuralSub').textContent = avidity==='avid'?'Iodine-concentrating':(avidity==='non-avid'?'No uptake':'Assess with scan');
+
+  document.getElementById('snapBiochem').className = 'snap-chip ' + (isRAIR?'snap-high':'snap-low');
+  document.getElementById('snapBiochem').textContent = isRAIR?'RAIR':'Not RAIR';
+  document.getElementById('snapBiochemSub').textContent = isRAIR?'Refractory criteria met':'No refractory criteria';
+
+  // primary action computed below; placeholder for now
+  let primaryAction = '—';
+
+  let html = '';
+
+  // ===== ORIGINAL HISTOLOGY CONTEXT (optional) =====
+  if (origHisto || origBRAFTERT) {
+    html += `<div class="section-divider"><span>Original Tumour Context</span></div>`;
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🧬</span> Baseline Histology Informs Recurrence Strategy</div><div class="follow-up-body">`;
+    const origLabels = {'PTC':'PTC (classical)','PTC-TCV':'PTC tall-cell variant','PTC-columnar':'PTC columnar/diffuse-sclerosing/hobnail/solid','FVPTC-encapsulated':'Encapsulated FVPTC/IEFVPTC','FTC-minimally':'Minimally invasive FTC','FTC-extensive':'Widely invasive FTC','OTC':'Oncocytic carcinoma (OTC)','poorly-diff':'Poorly differentiated'};
+    if (origHisto) html += `<p>Original histology: <span class="hl">${origLabels[origHisto]||origHisto}</span></p>`;
+    if (origAggressive) {
+      html += `<div class="alert-box alert-orange">⚠ <strong>Aggressive original histology.</strong> ${origHisto==='OTC'?'OTC':'This subtype'} is associated with lower RAI avidity and higher FDG-PET utility (Rec 50A). Expect a higher likelihood that recurrent disease is RAI-refractory and FDG-avid — favour FDG-PET/CT for localisation and have a lower threshold for the RAI-refractory pathway if uptake is absent.</div>`;
+    }
+    if (origBRAFTERT) {
+      html += `<p><span class="hl">High-risk co-mutation (BRAF+TERT or similar) noted from original specimen.</span> Associated with more aggressive behaviour and de-differentiation; reinforces the value of molecular-targeted therapy planning if disease becomes RAI-refractory and progressive.</p>`;
+    }
+    html += `<p style="font-size:12px; color:var(--text-dim);">Original histology refines expectations but does not override the acute decision, which is driven by the recurrent lesion's features below.</p>`;
+    html += `<div class="rec-tag">Rec 50A (FDG-PET in OTC/aggressive histology), Rec 10/28 (molecular) — ATA 2025</div></div></div>`;
+  }
+
+  // ===== LOCOREGIONAL =====
+  if (recType === 'locoregional') {
+    html += `<div class="section-divider"><span>Locoregional Recurrence — Management (Recs 53–54)</span></div>`;
+
+    // Active surveillance candidate?
+    const smallNode = !isNaN(nodeSize) && nodeSize > 0 && nodeSize < 8;
+    const subcm = !isNaN(nodeSize) && nodeSize >= 8 && nodeSize < 10;
+
+    if (smallNode && tempo === 'stable' && ene !== 'yes') {
+      primaryAction = 'Active surveillance';
+      html += `<div class="alert-box alert-blue">◎ <strong>Active surveillance is a reasonable option.</strong> Small (&lt;8 mm smallest dimension), stable, non-invasive nodal disease may be monitored rather than immediately resected.</div>`;
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">👁</span> Active Surveillance</div><div class="follow-up-body">`;
+      html += `<ul style="margin:4px 0 4px 18px;">
+        <li style="margin-bottom:5px;">Neck USG every 6 months for 1–2 years, then annually if stable.</li>
+        <li style="margin-bottom:5px;">Surgical consultation / resection if: new clinically significant nodes appear, documented growth (&gt;3–5 mm), threat to aerodigestive structures, or patient preference.</li>
+        <li>Small-volume stable cervical nodal disease has an indolent course in most patients; immediate reoperation does not clearly improve survival and carries reoperative morbidity.</li>
+      </ul>`;
+      html += `<div class="rec-tag">Recs on active surveillance / locoregional disease — ATA 2025</div></div></div>`;
+    } else if (resectable === 'resectable' || resectable === 'prior-surgery') {
+      primaryAction = 'Surgical resection';
+      html += `<div class="alert-box alert-green">🔪 <strong>Compartment-oriented surgical resection is the preferred first-line treatment</strong> for resectable, clinically significant locoregional recurrence.</div>`;
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🔪</span> Surgery</div><div class="follow-up-body">`;
+      html += `<ul style="margin:4px 0 4px 18px;">
+        <li style="margin-bottom:5px;">Therapeutic compartmental (not "berry-picking") dissection of the involved compartment(s).</li>
+        ${resectable==='prior-surgery'?'<li style="margin-bottom:5px;">Reoperative field: higher risk to recurrent laryngeal nerve and parathyroids — pre-op laryngoscopy, consider intraoperative nerve monitoring, surgeon experienced in reoperative neck surgery.</li>':''}
+        <li style="margin-bottom:5px;">FNA confirmation (± Tg washout) of target nodes before reoperation; cross-sectional imaging (CT with contrast) to map extent.</li>
+        <li>Additional RAI after resection: <strong>may be considered if disease is RAI-avid</strong>, but evidence shows limited benefit — RAI after reoperation was NOT associated with reduced second recurrence on multivariable analysis (Rec 53). Decide case-by-case.</li>
+      </ul>`;
+      html += `<div class="rec-tag">Rec 53 — ATA 2025 (Conditional recommendation, Low certainty evidence)</div></div></div>`;
+    } else { // not resectable
+      primaryAction = 'EBRT / RAI / systemic';
+      html += `<div class="alert-box alert-orange">⚠ <strong>Non-resectable locoregional recurrence.</strong> Surgery is not feasible — management depends on RAI avidity and disease tempo.</div>`;
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🎯</span> Non-surgical Options</div><div class="follow-up-body">`;
+      html += `<ul style="margin:4px 0 4px 18px;">
+        ${avidity==='avid'?'<li style="margin-bottom:5px;"><strong>RAI-avid →</strong> therapeutic RAI (100–150 mCi locoregional).</li>':''}
+        <li style="margin-bottom:5px;"><strong>EBRT</strong> (IMRT / stereotactic) for unresectable locoregional disease, extranodal extension, or soft-tissue/aerodigestive involvement, particularly with no distant disease (Rec 54).</li>
+        <li style="margin-bottom:5px;">Consider thermal/percutaneous ablation for select small unresectable foci.</li>
+        ${isRAIR && tempo==='progressive'?'<li style="margin-bottom:5px;"><strong>RAIR + progressive →</strong> systemic therapy (see systemic section below).</li>':''}
+      </ul>`;
+      html += `<div class="rec-tag">Rec 54 — ATA 2025 (EBRT for unresectable / ENE / soft-tissue involvement)</div></div></div>`;
+    }
+    // RAI avidity note for locoregional
+    if (avidity === 'unknown') {
+      html += `<div class="alert-box alert-blue">ℹ Obtain diagnostic <sup>123</sup>I WBS ± SPECT-CT (and/or FDG-PET/CT) to establish RAI avidity, which informs whether RAI adds value after local therapy.</div>`;
+    }
+  }
+
+  // ===== DISTANT =====
+  if (recType === 'distant') {
+    html += `<div class="section-divider"><span>Distant Metastatic Disease — Management (Recs 55–61)</span></div>`;
+    const sites = [];
+    if (document.getElementById('recMetLung').checked) sites.push('lung');
+    if (document.getElementById('recMetBone').checked) sites.push('bone');
+    if (document.getElementById('recMetBrain').checked) sites.push('brain/CNS');
+    if (document.getElementById('recMetOther').checked) sites.push('other');
+
+    if (avidity === 'avid' && !isRAIR) {
+      primaryAction = 'Therapeutic RAI';
+      html += `<div class="alert-box alert-green">☢️ <strong>RAI-avid distant disease → therapeutic <sup>131</sup>I is indicated.</strong></div>`;
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">☢️</span> Therapeutic RAI (Recs 55–57)</div><div class="follow-up-body">`;
+      html += `<ul style="margin:4px 0 4px 18px;">
+        <li style="margin-bottom:5px;">Empiric activity 100–200 mCi (3.7–7.4 GBq); empiric amounts &gt;5.5 GBq generally avoided in older patients / those with extensive pulmonary disease.</li>
+        <li style="margin-bottom:5px;"><strong>Dosimetry-guided dosing</strong> for diffuse pulmonary metastases (limit 48-h whole-body retention &lt;80 mCi and lung dose) to avoid radiation pneumonitis / fibrosis.</li>
+        <li style="margin-bottom:5px;">Adequate TSH stimulation (>30 mIU/L) ± low-iodine diet.</li>
+        <li>Post-therapy WBS at 5–7 days to document avidity and response; reassess for further RAI vs RAIR transition.</li>
+      </ul>`;
+      html += `<div class="rec-tag">Recs 55–57 — ATA 2025</div></div></div>`;
+    } else if (isRAIR || avidity === 'non-avid') {
+      primaryAction = (tempo==='progressive') ? 'Systemic therapy' : 'Active surveillance';
+      html += `<div class="alert-box alert-orange">⚠ <strong>RAI-refractory distant disease.</strong> Further RAI is not beneficial (Rec 59B). Management is driven by tempo and symptoms.</div>`;
+    } else if (avidity === 'unknown') {
+      primaryAction = 'Assess avidity';
+      html += `<div class="alert-box alert-blue">ℹ <strong>Establish RAI avidity first</strong> — diagnostic <sup>123</sup>I WBS + SPECT-CT and/or <sup>18</sup>FDG-PET/CT. RAI-avid → therapeutic RAI; non-avid/RAIR → systemic pathway.</div>`;
+    }
+
+    // Oligometastatic directed therapy
+    if (burden === 'oligometastatic') {
+      html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🎯</span> Oligometastatic — Directed Local Therapy (Rec 60)</div><div class="follow-up-body">`;
+      html += `<ul style="margin:4px 0 4px 18px;">
+        <li style="margin-bottom:5px;">For limited/oligometastatic disease, directed therapy can defer systemic treatment: SBRT/stereotactic radiation, surgical metastasectomy, thermal ablation (RFA/cryoablation).</li>
+        ${sites.includes('bone')?'<li style="margin-bottom:5px;">Bone: consider EBRT/SBRT for painful or structurally threatening lesions; bone-modifying agents (bisphosphonate/denosumab) for diffuse skeletal disease.</li>':''}
+        ${sites.includes('brain/CNS')?'<li style="margin-bottom:5px;">CNS: neurosurgical resection or stereotactic radiosurgery; CNS metastases warrant local treatment regardless of systemic plan.</li>':''}
+      </ul><div class="rec-tag">Rec 60 — oligometastatic / site-specific therapy</div></div></div>`;
+    }
+  }
+
+  // ===== BIOCHEMICAL ONLY =====
+  if (recType === 'biochemical') {
+    primaryAction = 'Localise disease';
+    html += `<div class="section-divider"><span>Biochemical Recurrence — Localisation Pathway</span></div>`;
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">⚑</span> Rising Tg/TgAb, No Structural Disease</div><div class="follow-up-body">`;
+    html += `<p>Rising thyroglobulin or TgAb without localised structural disease is biochemically incomplete response / biochemical recurrence. Find the disease before treating it:</p>`;
+    html += `<ul style="margin:6px 0 6px 18px;">
+      <li style="margin-bottom:5px;">High-resolution neck USG (repeat); CT neck/chest with contrast.</li>
+      <li style="margin-bottom:5px;"><strong><sup>18</sup>FDG-PET/CT</strong> — primary modality when Tg &gt;10 ng/mL or rising, or with aggressive histology (TENIS pattern).</li>
+      <li style="margin-bottom:5px;">Diagnostic <sup>123</sup>I WBS to assess RAI avidity if not already known.</li>
+      <li style="margin-bottom:5px;">Calculate <strong>Tg doubling time</strong> — short doubling time (&lt;1 year) predicts more aggressive disease and worse outcomes.</li>
+      <li><strong>Empiric RAI without localisation:</strong> limited benefit (≈56% progress despite empiric RAI); reserve for after imaging workup (Rec 58).</li>
+    </ul>`;
+    html += `<div class="rec-tag">Recs 50, 58, 59 — ATA 2025</div></div></div>`;
+  }
+
+  // ===== SYSTEMIC THERAPY (RAIR + progressive) =====
+  const needsSystemic = (isRAIR || avidity === 'non-avid') && tempo === 'progressive' && recType !== 'biochemical';
+  if (needsSystemic) {
+    html += `<div class="section-divider"><span>Systemic Therapy — Progressive RAIR DTC (Recs 59–61)</span></div>`;
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">💊</span> Systemic Therapy Approach</div><div class="follow-up-body">`;
+    html += `<p><span class="hl">Molecular testing first (Rec 61):</span> Comprehensive genomic profiling should be performed prior to initiating systemic therapy for progressive RAIR DTC — to identify actionable drivers (strong recommendation, moderate certainty).</p>`;
+
+    // Molecular-driven first-line
+    html += `<table class="drug-table"><thead><tr><th>Target</th><th>Preferred first-line</th></tr></thead><tbody>`;
+    if (mol.ntrk) html += `<tr><td class="drug-name">NTRK fusion</td><td>Larotrectinib or entrectinib (Rec 69)</td></tr>`;
+    if (mol.ret) html += `<tr><td class="drug-name">RET fusion</td><td>Selpercatinib or pralsetinib (Rec 70)</td></tr>`;
+    if (mol.alk) html += `<tr><td class="drug-name">ALK fusion</td><td>ALK inhibitor (e.g. crizotinib) (Rec 71)</td></tr>`;
+    if (mol.braf) html += `<tr><td class="drug-name">BRAF V600E</td><td>BRAF-targeted therapy (dabrafenib ± trametinib); also consider redifferentiation to restore RAI avidity (Recs 72, 74)</td></tr>`;
+    if (mol.none || (!mol.ntrk && !mol.ret && !mol.alk && !mol.braf)) {
+      html += `<tr><td class="drug-name">No actionable driver</td><td><strong>Lenvatinib</strong> is the preferred first-line MKI (Rec 64). Starting dose 24 mg/day (Rec 66). Alternative: sorafenib.</td></tr>`;
+    }
+    html += `</tbody></table>`;
+
+    html += `<p style="margin-top:10px;"><span class="hl">Timing (Rec 65):</span> Initiate MKI for progressive disease (RECIST progression, or symptomatic/threatening disease) — not for stable asymptomatic disease. <span class="hl">Second-line (Rec 68):</span> on progression/intolerance, switch to alternative MKI (e.g. cabozantinib).</p>`;
+    html += `<div class="rec-tag">Recs 61–74 — ATA 2025; lenvatinib 24 mg first-line (SELECT trial)</div></div></div>`;
+  } else if ((isRAIR || avidity === 'non-avid') && tempo === 'stable' && recType !== 'biochemical') {
+    html += `<div class="section-divider"><span>RAIR but Stable — Active Surveillance (Rec 60)</span></div>`;
+    html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">👁</span> Monitor, Do Not Treat Yet</div><div class="follow-up-body">`;
+    html += `<p>Asymptomatic, stable, or minimally progressive RAIR metastatic DTC — or significant comorbidities — <strong>can be monitored</strong> on TSH-suppressive therapy with periodic imaging (Rec 60A). Systemic therapy carries toxicity and is reserved for progressive or symptomatic disease. Reserve MKIs for documented progression.</p>`;
+    html += `<div class="rec-tag">Rec 60 — ATA 2025 (Conditional recommendation, Low certainty evidence)</div></div></div>`;
+  }
+
+  // ===== TSH for recurrent disease =====
+  html += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">🎯</span> TSH Target in Recurrent/Persistent Disease</div><div class="follow-up-body">`;
+  html += `<p>With structural or biochemical evidence of disease, target <span class="hl">TSH below the normal reference range</span> (Table 9, footnote c), individualised to comorbidities (atrial fibrillation, osteoporosis, ischaemic heart disease must be weighed). Maintain suppression while active disease persists.</p>`;
+  html += `<div class="rec-tag">Table 9 + Rec 45 — ATA 2025</div></div></div>`;
+
+  // ===== MDT =====
+  html += `<div class="follow-up-card" style="background:var(--surface2)"><div class="follow-up-header"><span class="fh-icon">🏥</span> Multidisciplinary Management</div><div class="follow-up-body">`;
+  html += `<p>Recurrent/metastatic DTC should be managed by a multidisciplinary team (endocrinology, surgery, nuclear medicine, radiation/medical oncology, pathology). Treatment sequencing and clinical-trial eligibility should be considered for progressive RAIR disease.</p>`;
+  html += `<p style="margin-top:8px; font-size:11px; color:var(--text-dim);">Generated: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} | Reference: ATA 2025 DTC Guidelines, Recs 53–74</p>`;
+  html += `</div></div>`;
+
+  // set primary action snapshot now
+  const elAct = document.getElementById('snapTSH');
+  if (elAct) { elAct.style.fontSize='14px'; elAct.textContent = primaryAction; }
+  const elActSub = document.getElementById('snapTSHsub');
+  if (elActSub) elActSub.textContent = 'Per Recs 53–61';
+
+  // hide the AJCC/response grid (not applicable to recurrence)
+  document.querySelector('.result-grid').style.display = 'none';
+
+  document.getElementById('resultContent').innerHTML = html;
+
+  // ---- Build case record for recurrence ----
+  currentCase = {
+    id: genCaseId(),
+    patientKey: makePatientKey(
+      (document.getElementById('patName')?document.getElementById('patName').value:''),
+      (document.getElementById('patMobile')?document.getElementById('patMobile').value:''),
+      (document.getElementById('patMRN')?document.getElementById('patMRN').value:'')
+    ),
+    name: (document.getElementById('patName')?document.getElementById('patName').value:'').trim(),
+    initials: (document.getElementById('patName')?document.getElementById('patName').value:'').trim(),
+    mobile: (document.getElementById('patMobile')?document.getElementById('patMobile').value:'').trim(),
+    mrn: (document.getElementById('patMRN')?document.getElementById('patMRN').value:'').trim(),
+    date: new Date().toLocaleDateString('en-CA'),
+    mode: 'recurrence',
+    histology: origHisto || '', T: '', N: '', M: '', surgery: '', age: '',
+    risk: '', ajcc: '', response: '',
+    structural: avidLabel, biochem: (isRAIR ? 'RAIR' : 'Not RAIR'),
+    tsh: 'Below normal range',
+    tgValue: '', tgContext: '', tgab: '',
+    raiGiven: '', postWBS: '', postUSG: '',
+    recType: typeLabel, recAvidity: avidLabel, primaryAction: primaryAction
+  };
+  document.getElementById('caseIdValue').textContent = currentCase.id;
+  document.getElementById('caseSavedStatus').textContent = 'Not yet saved — click “Save case” to store locally';
+  document.getElementById('caseSavedStatus').style.color = 'var(--text-dim)';
+  document.getElementById('savedCasesPanel').style.display = 'none';
+
+  showScreen('result-section');
 }
 
 function resetAll() {
   location.reload();
 }
+
+// Context-aware "Edit Inputs" — returns to the correct form for the active stage
+function editInputs() {
+  if (assessMode === 'recurrence') {
+    showScreen('recurrence-section');
+  } else if (assessMode === 'returning') {
+    showScreen('returning-section');
+  } else {
+    showScreen('form-section', { progress: true });
+    goStep(1);
+  }
+}
+
+function printResult() {
+  // populate print header meta line
+  const meta = document.getElementById('printMeta');
+  if (meta && currentCase) {
+    const idLabel = [currentCase.name, currentCase.mobile, currentCase.mrn].filter(Boolean).join(' · ');
+    meta.textContent = 'Case ' + (currentCase.id||'') + (idLabel ? '  |  ' + idLabel : '') + '  |  ' + (currentCase.date||'');
+  }
+  window.print();
+}
+
+// ========== CASE ID + STORAGE (Firebase cloud + local fallback) ==========
+const STORAGE_KEY = 'dtc_saved_cases_v1';
+let currentCase = null; // holds the latest computed case for saving
+let loadedBaseline = null; // fixed data loaded for a returning patient
+let SAVED_CACHE = [];   // in-memory mirror of saved cases (synchronous reads)
+
+function makePatientKey(initials, mobile, mrn) {
+  // prefer MRN, then mobile, then initials; lowercased/trimmed
+  const m = (mrn||'').trim().toLowerCase();
+  const mo = (mobile||'').trim().replace(/\s+/g,'');
+  const i = (initials||'').trim().toLowerCase();
+  return m || mo || i || ('anon-' + Math.random().toString(36).slice(2,8));
+}
+
+// ---- ID counter: Firebase (atomic) if enabled, else local ----
+async function genCaseIdAsync() {
+  const yr = new Date().getFullYear();
+  const yy = String(yr).slice(2);
+  if (FB.enabled) {
+    try {
+      const ref = FB.db.collection('dtc_meta').doc('counter_' + yr);
+      const next = await FB.db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const cur = (snap.exists ? (snap.data().value||0) : 0) + 1;
+        tx.set(ref, { value: cur }, { merge:true });
+        return cur;
+      });
+      return 'DTC-' + yy + '/' + String(next).padStart(4,'0');
+    } catch(e) { console.warn('FB counter failed, local fallback', e); }
+  }
+  return genCaseIdLocal();
+}
+function genCaseIdLocal() {
+  const yr = new Date().getFullYear();
+  const yy = String(yr).slice(2);
+  const COUNTER_KEY = 'dtc_id_counter';
+  let counters = {};
+  try { counters = JSON.parse(localStorage.getItem(COUNTER_KEY)) || {}; } catch(e) { counters = {}; }
+  const cur = (counters[yr] || 0) + 1;
+  counters[yr] = cur;
+  try { localStorage.setItem(COUNTER_KEY, JSON.stringify(counters)); } catch(e) {}
+  return 'DTC-' + yy + '/' + String(cur).padStart(4, '0');
+}
+// synchronous wrapper used by report generators (uses local; reconciled on save)
+function genCaseId() { return genCaseIdLocal(); }
+
+// ---- Cache-backed synchronous read used everywhere ----
+function loadSavedCases() { return SAVED_CACHE.slice(); }
+
+function persistSavedCasesLocal(arr) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); return true; }
+  catch(e) { return false; }
+}
+
+// ---- Initial load: pull from Firebase into cache, else from localStorage ----
+async function initStorage() {
+  if (FB.enabled) {
+    try {
+      const snap = await FB.db.collection('dtc_cases').get();
+      SAVED_CACHE = snap.docs.map(d => d.data());
+      // merge any local-only cases not yet in cloud
+      let local = [];
+      try { local = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e){}
+      local.forEach(lc => { if (!SAVED_CACHE.find(c=>c.id===lc.id)) { SAVED_CACHE.push(lc); pushCaseToCloud(lc); } });
+      return;
+    } catch(e) { console.warn('FB load failed, using local', e); }
+  }
+  try { SAVED_CACHE = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { SAVED_CACHE = []; }
+}
+
+async function pushCaseToCloud(c) {
+  if (!FB.enabled) return false;
+  try { await FB.db.collection('dtc_cases').doc(c.id).set(c); return true; }
+  catch(e) { console.warn('FB save failed', e); return false; }
+}
+async function deleteCaseCloud(id) {
+  if (!FB.enabled) return;
+  try { await FB.db.collection('dtc_cases').doc(id).delete(); } catch(e) { console.warn('FB delete failed', e); }
+}
+
+function saveCurrentCase() {
+  if (!currentCase) { alert('No assessment to save yet.'); return; }
+  const status = document.getElementById('caseSavedStatus');
+  // If cloud is enabled and this case hasn't been cloud-saved yet, get an atomic cloud ID first
+  if (FB.enabled && !currentCase._cloudId) {
+    status.textContent = '⏳ Reserving cloud ID & saving…'; status.style.color = 'var(--text-dim)';
+    genCaseIdAsync().then(cloudId => {
+      currentCase.id = cloudId;
+      currentCase._cloudId = true;
+      const cidEl = document.getElementById('caseIdValue'); if (cidEl) cidEl.textContent = cloudId;
+      _commitSave(status);
+    }).catch(()=>{ _commitSave(status); });
+  } else {
+    _commitSave(status);
+  }
+}
+
+function _commitSave(status) {
+  const idx = SAVED_CACHE.findIndex(c => c.id === currentCase.id);
+  if (idx >= 0) SAVED_CACHE[idx] = currentCase; else SAVED_CACHE.push(currentCase);
+  persistSavedCasesLocal(SAVED_CACHE);
+  if (FB.enabled) {
+    pushCaseToCloud(currentCase).then(ok => {
+      if (ok) { status.textContent = '✓ Saved & synced to cloud (' + SAVED_CACHE.length + ' total)'; status.style.color = 'var(--low)'; }
+      else { status.textContent = '✓ Saved locally; ⚠ cloud sync failed (will retry next load)'; status.style.color = 'var(--moderate)'; }
+    });
+  } else {
+    status.textContent = '✓ Saved to this browser (' + SAVED_CACHE.length + ' total). Cloud sync not configured.';
+    status.style.color = 'var(--low)';
+  }
+}
+
+function caseToRow(c) {
+  // flat object for CSV columns
+  return {
+    'Case ID': c.id,
+    'Patient Name': c.name || c.initials || '',
+    'Mobile': c.mobile || '',
+    'MRN': c.mrn || '',
+    'Date': c.date,
+    'Mode': c.mode,
+    'Histology': c.histology || '',
+    'T': c.T || '',
+    'N': c.N || '',
+    'M': c.M || '',
+    'Surgery': c.surgery || '',
+    'Age': c.age || '',
+    'Risk Category': c.risk || '',
+    'AJCC Stage': c.ajcc || '',
+    'Response Category': c.response || '',
+    'Structural Status': c.structural || '',
+    'Biochemical Status': c.biochem || '',
+    'TSH Target': c.tsh || '',
+    'Time since surgery': c.timeSurgery || '',
+    'Tg (ng/mL)': c.tgValue || '',
+    'Tg context': c.tgContext || '',
+    'TgAb': c.tgab || '',
+    'RAI given': c.raiGiven || '',
+    'Post-WBS': c.postWBS || '',
+    'Post-USG': c.postUSG || '',
+    'Recurrence type': c.recType || '',
+    'RAI avidity': c.recAvidity || '',
+    'Primary action': c.primaryAction || ''
+  };
+}
+
+function csvEscape(v) {
+  v = (v == null) ? '' : String(v);
+  if (/[",\n]/.test(v)) return '"' + v.replace(/"/g,'""') + '"';
+  return v;
+}
+
+function exportAllCasesCSV() {
+  const cases = loadSavedCases();
+  // include current unsaved case too if present and not already saved
+  let all = cases.slice();
+  if (currentCase && !all.find(c => c.id === currentCase.id)) all = all.concat([currentCase]);
+  if (!all.length) { alert('No saved cases to export. Save at least one case first.'); return; }
+  const rows = all.map(caseToRow);
+  const headers = Object.keys(rows[0]);
+  const csv = [headers.map(csvEscape).join(',')]
+    .concat(rows.map(r => headers.map(h => csvEscape(r[h])).join(',')))
+    .join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'DTC_cases_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showSavedCases() {
+  const panel = document.getElementById('savedCasesPanel');
+  const body = document.getElementById('savedCasesBody');
+  const cases = loadSavedCases();
+  if (!cases.length) {
+    body.innerHTML = '<p style="color:var(--text-dim);">No cases saved yet. Use “Save case” to store the current assessment in this browser.</p>';
+  } else {
+    let h = '<p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">' + cases.length + ' case(s) stored locally in this browser. Data never leaves your device.</p>';
+    h += '<div style="overflow-x:auto;"><table class="drug-table"><thead><tr><th>Case ID</th><th>Date</th><th>Mode</th><th>Risk / Type</th><th>Response</th><th></th></tr></thead><tbody>';
+    cases.forEach(c => {
+      h += `<tr><td class="drug-name">${c.id}</td><td>${c.date||''}</td><td>${c.mode||''}</td><td>${c.risk||c.recType||''}</td><td>${c.response||c.primaryAction||''}</td><td><button onclick="deleteCase('${c.id}')" style="background:none;border:none;color:var(--high);cursor:pointer;font-size:12px;">delete</button></td></tr>`;
+    });
+    h += '</tbody></table></div>';
+    h += '<div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;"><button class="btn btn-secondary" onclick="exportAllCasesCSV()">⬇ Export all (CSV)</button><button class="btn btn-secondary" onclick="clearAllCases()" style="color:var(--high);">Clear all</button></div>';
+    body.innerHTML = h;
+  }
+  panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+}
+
+function deleteCase(id) {
+  SAVED_CACHE = SAVED_CACHE.filter(c => c.id !== id);
+  persistSavedCasesLocal(SAVED_CACHE);
+  deleteCaseCloud(id);
+  showSavedCases(); showSavedCases(); // toggle to refresh open
+  document.getElementById('savedCasesPanel').style.display = 'block';
+}
+
+function clearAllCases() {
+  if (!confirm('Delete ALL saved cases? ' + (FB.enabled ? 'This removes them from the cloud for ALL your devices. ' : '') + 'This cannot be undone.')) return;
+  const ids = SAVED_CACHE.map(c=>c.id);
+  SAVED_CACHE = [];
+  persistSavedCasesLocal([]);
+  if (FB.enabled) ids.forEach(id => deleteCaseCloud(id));
+  showSavedCases(); document.getElementById('savedCasesPanel').style.display = 'block';
+}
+
+// Initialise storage (pull cloud cases into cache) on page load
+window.addEventListener('DOMContentLoaded', function(){ initStorage(); });
+
+// ========== PATIENT SEARCH & RETURNING VISIT ==========
+function runPatientSearch() {
+  const q = (document.getElementById('patientSearch').value || '').trim().toLowerCase();
+  const out = document.getElementById('searchResults');
+  if (!q) { out.innerHTML = '<p style="font-size:12px;color:var(--text-dim);">Enter initials, mobile, or MRN to search.</p>'; return; }
+  const cases = loadSavedCases();
+  // match on initials/mobile/mrn/patientKey containing the query
+  const matches = cases.filter(c => {
+    const hay = [(c.name||''),(c.initials||''),(c.mobile||''),(c.mrn||''),(c.patientKey||'')].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  if (!matches.length) {
+    out.innerHTML = '<p style="font-size:12px;color:var(--text-dim);">No matching records in this browser. (Records are stored locally — a patient saved on another device won\'t appear here.)</p>';
+    return;
+  }
+  // group by patientKey
+  const groups = {};
+  matches.forEach(c => { (groups[c.patientKey] = groups[c.patientKey] || []).push(c); });
+  let h = '<p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">' + Object.keys(groups).length + ' patient(s) found:</p>';
+  Object.keys(groups).forEach(key => {
+    const visits = groups[key].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+    const latest = visits[visits.length-1];
+    const idLabel = [latest.name||latest.initials, latest.mobile, latest.mrn].filter(Boolean).join(' · ') || key;
+    h += `<div style="border:1px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:8px;">
+      <div style="font-weight:600;font-size:13px;color:var(--text);">${idLabel}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:4px 0;">${visits.length} visit(s) · latest ${latest.date} · ${latest.risk||latest.recType||''} / ${latest.response||latest.primaryAction||''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+        <button class="btn btn-primary" style="padding:7px 14px;font-size:12px;" onclick="loadPatientForFollowup('${key}')">+ New follow-up visit</button>
+        <button class="btn btn-secondary" style="padding:7px 14px;font-size:12px;" onclick="viewPatientHistory('${key}')">View history</button>
+      </div>
+    </div>`;
+  });
+  out.innerHTML = h;
+}
+
+function getPatientVisits(key) {
+  return loadSavedCases().filter(c => c.patientKey === key).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+
+function viewPatientHistory(key) {
+  const visits = getPatientVisits(key);
+  if (!visits.length) return;
+  let h = '<div style="overflow-x:auto;margin-top:10px;"><table class="drug-table"><thead><tr><th>Date</th><th>Mode</th><th>Tg</th><th>TgAb</th><th>Response</th><th>Risk/Type</th></tr></thead><tbody>';
+  visits.forEach(v => {
+    h += `<tr><td>${v.date||''}</td><td>${v.mode||''}</td><td>${v.tgValue||'—'}${v.tgContext?(' ('+v.tgContext+')'):''}</td><td>${v.tgab||'—'}</td><td>${v.response||v.primaryAction||'—'}</td><td>${v.risk||v.recType||'—'}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  document.getElementById('searchResults').innerHTML = h +
+    `<button class="btn btn-secondary" style="margin-top:10px;padding:7px 14px;font-size:12px;" onclick="runPatientSearch()">← Back to results</button>`;
+}
+
+function loadPatientForFollowup(key) {
+  const visits = getPatientVisits(key);
+  if (!visits.length) { alert('No stored visits for this patient.'); return; }
+  // find the most recent visit that has a fixed baseline block
+  const withFixed = visits.filter(v => v.fixed && v.fixed.histologyValue);
+  const base = (withFixed.length ? withFixed[withFixed.length-1] : visits[visits.length-1]);
+  if (!base.fixed || !base.fixed.histologyValue) {
+    alert('This patient record has no stored baseline (it may have been a recurrence-only entry). Please use Initial or Follow-up Restratification to enter full data.');
+    return;
+  }
+  loadedBaseline = base;
+  assessMode = 'returning';
+
+  // Show baseline summary
+  const f = base.fixed;
+  const idLabel = [base.name||base.initials, base.mobile, base.mrn].filter(Boolean).join(' · ') || key;
+  document.getElementById('returningPatientLabel').textContent = idLabel;
+  document.getElementById('returningBaseline').innerHTML =
+    `<b>Histology:</b> ${f.histology} &nbsp;|&nbsp; <b>TNM:</b> ${f.T}/${f.N}/${f.M} &nbsp;|&nbsp; <b>Surgery:</b> ${f.surgery} &nbsp;|&nbsp; <b>Age:</b> ${f.age}<br>` +
+    `<b>Baseline ATA risk:</b> ${labelForRisk(f.risk)} &nbsp;|&nbsp; <b>Prior visits:</b> ${visits.length}<br>` +
+    `<span style="color:var(--text-dim);">Last visit (${base.date}): Tg ${base.tgValue||'—'} ${base.tgContext?('('+base.tgContext+')'):''}, ${base.response||'—'}</span>`;
+
+  // reset returning-form state
+  ['ret_tgContext','ret_tgab','ret_postUSG','ret_postWBS'].forEach(k=>state[k]=null);
+  document.querySelectorAll('#returning-section .toggle-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('ret_tgValue').value = '';
+
+  showScreen('returning-section');
+}
+
+function labelForRisk(r) {
+  return ({low:'LOW',['low-int']:'LOW-INT',['int-high']:'INT-HIGH',high:'HIGH'})[r] || (r||'—');
+}
+
+function backToModeFromReturning() {
+  loadedBaseline = null; assessMode = null;
+  showScreen('mode-selector');
+}
+
+function generateReturningVisit() {
+  if (!loadedBaseline) { alert('No baseline loaded.'); return; }
+  const f = loadedBaseline.fixed;
+
+  // require new visit values
+  const tgCtx = state.ret_tgContext;
+  const tgab = state.ret_tgab;
+  const usg = state.ret_postUSG;
+  const missing = [];
+  if (f.surgery !== 'lobectomy' && !tgCtx) missing.push('Tg assay context');
+  if (!tgab) missing.push('TgAb status');
+  if (!usg) missing.push('Current neck ultrasound');
+  if (missing.length) { alert('Please enter this visit\'s values:\n\n• ' + missing.join('\n• ')); return; }
+
+  const wbs = state.ret_postWBS || 'not-done';
+  const tgVal = document.getElementById('ret_tgValue').value;
+  const timeSurgery = document.getElementById('ret_timeSurgery').value;
+
+  // Reconstruct a full state from baseline + this visit, then reuse the engine.
+  // Set the hidden form fields so calc functions read correct values.
+  setFieldValue('histology', f.histologyValue);
+  setFieldValue('tCategory', f.T);
+  setFieldValue('nCategory', f.N);
+  setFieldValue('surgery', f.surgery);
+  setFieldValue('patientAge', f.age);
+  setFieldValue('posNodes', f.posNodes || '');
+  setFieldValue('nodeSize', f.nodeSize || '');
+  setFieldValue('tgValue', tgVal);
+  setCheckbox('aggressHisto', f.aggressHisto);
+  setCheckbox('poorlyDiff', f.poorlyDiff);
+  setCheckbox('widelyInvasive', f.widelyInvasive);
+  setCheckbox('brafTert', f.brafTert);
+  setCheckbox('rasTert', f.rasTert);
+  // timeSurgery select
+  setFieldValue('timeSurgery', timeSurgery);
+
+  // restore fixed toggle-state
+  state.ete = f.ete; state.focality = f.focality; state.vascular = f.vascular;
+  state.margin = f.margin; state.ene = f.ene; state.angioinv = f.angioinv;
+  state.mstatus = f.M;
+  // this-visit varying state
+  state.tgContext = tgCtx; state.tgab = tgab; state.postUSG = usg; state.postWBS = wbs;
+  // RAI: carry over from last visit's raiGiven if present
+  state.raiGiven = loadedBaseline.raiGiven || 'no';
+
+  // mark mode so report labels it a follow-up visit
+  assessMode = 'returning';
+
+  // copy identifiers into the hidden identifier fields so the new case keeps patientKey
+  setFieldValue('patName', loadedBaseline.name || loadedBaseline.initials || '');
+  setFieldValue('patMobile', loadedBaseline.mobile || '');
+  setFieldValue('patMRN', loadedBaseline.mrn || '');
+
+  document.getElementById('returning-section').style.display = 'none';
+  generateReport(); // reuse the full engine
+
+  // After report: attach trend comparison for this patient
+  appendVisitTrend(loadedBaseline.patientKey);
+}
+
+function setFieldValue(id, v) { const e = document.getElementById(id); if (e) e.value = (v==null?'':v); }
+function setCheckbox(id, v) { const e = document.getElementById(id); if (e) e.checked = !!v; }
+
+function buildTgChart(series) {
+  // Plot Tg over visits as inline SVG. Returns '' if <2 numeric points.
+  const pts = series.map((v,i) => ({ i, date: v.date||('Visit '+(i+1)), tg: parseFloat(v.tgValue), ctx: v.tgContext }))
+    .filter(p => !isNaN(p.tg));
+  if (pts.length < 2) return '';
+
+  const W = 620, H = 240, padL = 52, padR = 20, padT = 20, padB = 46;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxTg = Math.max(...pts.map(p=>p.tg));
+  const minTg = Math.min(0, ...pts.map(p=>p.tg));
+  const yMax = maxTg <= 0 ? 1 : maxTg * 1.15;
+  const x = i => padL + (pts.length===1 ? plotW/2 : (i/(pts.length-1))*plotW);
+  const y = t => padT + plotH - ((t - minTg)/(yMax - minTg))*plotH;
+
+  // gridlines / y ticks (4)
+  let grid = '', ticks = 4;
+  for (let k=0;k<=ticks;k++){
+    const val = minTg + (yMax-minTg)*k/ticks;
+    const yy = y(val);
+    grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`;
+    grid += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--text-dim)" font-family="DM Mono, monospace">${val.toFixed(val<10?1:0)}</text>`;
+  }
+  // line path
+  const path = pts.map((p,idx)=>`${idx===0?'M':'L'}${x(idx).toFixed(1)},${y(p.tg).toFixed(1)}`).join(' ');
+  // dots + x labels + value labels
+  let dots='', xlabels='';
+  pts.forEach((p,idx)=>{
+    const cx=x(idx), cy=y(p.tg);
+    const col = p.ctx==='stimulated' ? 'var(--int-high)' : 'var(--accent)';
+    dots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="1.5"/>`;
+    dots += `<text x="${cx.toFixed(1)}" y="${(cy-10).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text)" font-family="DM Mono, monospace">${p.tg}</text>`;
+    const dlabel = (p.date||'').slice(5) || ('V'+(idx+1)); // MM-DD
+    xlabels += `<text x="${cx.toFixed(1)}" y="${H-padB+18}" text-anchor="middle" font-size="9.5" fill="var(--text-dim)" font-family="DM Mono, monospace">${dlabel}</text>`;
+    xlabels += `<text x="${cx.toFixed(1)}" y="${H-padB+30}" text-anchor="middle" font-size="8.5" fill="var(--text-dim)" font-family="DM Mono, monospace">${p.ctx==='stimulated'?'stim':'LT4'}</text>`;
+  });
+
+  return `
+  <div style="overflow-x:auto; margin:6px 0 4px;">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px; font-family:'Sora',sans-serif;">
+      ${grid}
+      <text x="14" y="${padT+plotH/2}" transform="rotate(-90 14 ${padT+plotH/2})" text-anchor="middle" font-size="10" fill="var(--text-dim)">Tg (ng/mL)</text>
+      <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      ${dots}
+      ${xlabels}
+    </svg>
+  </div>
+  <p style="font-size:10px;color:var(--text-dim);margin:0 0 6px;"><span style="color:var(--accent);">●</span> non-stimulated (LT4) &nbsp; <span style="color:var(--int-high);">●</span> stimulated — compare only points of the same type.</p>`;
+}
+
+function appendVisitTrend(key) {
+  // include the just-generated currentCase in the series view
+  const prior = getPatientVisits(key);
+  const series = prior.concat(currentCase ? [currentCase] : []);
+  if (series.length < 1) return;
+  let h = `<div class="section-divider"><span>Visit Trend — This Patient</span></div>`;
+  h += `<div class="follow-up-card"><div class="follow-up-header"><span class="fh-icon">📊</span> Longitudinal Comparison (${series.length} visit${series.length>1?'s':''})</div><div class="follow-up-body">`;
+  // SVG chart
+  h += buildTgChart(series);
+  h += `<div style="overflow-x:auto;"><table class="drug-table"><thead><tr><th>Date</th><th>Tg (ng/mL)</th><th>TgAb</th><th>Response</th><th>Structural</th><th>Biochem</th></tr></thead><tbody>`;
+  series.forEach((v,i) => {
+    const isCurrent = (i === series.length-1);
+    h += `<tr style="${isCurrent?'background:var(--accent-glow);':''}"><td>${v.date||''}${isCurrent?' <b>(this visit)</b>':''}</td><td>${v.tgValue||'—'}${v.tgContext?(' '+(v.tgContext==='stimulated'?'(stim)':'(LT4)')):''}</td><td>${v.tgab||'—'}</td><td>${v.response||'—'}</td><td>${v.structural||'—'}</td><td>${v.biochem||'—'}</td></tr>`;
+  });
+  h += `</tbody></table></div>`;
+  // Tg trend note
+  const tgs = series.map(v=>parseFloat(v.tgValue)).filter(x=>!isNaN(x));
+  if (tgs.length >= 2) {
+    const first = tgs[0], last = tgs[tgs.length-1];
+    const dir = last > first*1.2 ? 'rising' : (last < first*0.8 ? 'declining' : 'stable');
+    const dirColor = dir==='rising' ? 'var(--high)' : (dir==='declining' ? 'var(--low)' : 'var(--text-muted)');
+    h += `<p style="margin-top:10px;font-size:13px;"><b>Tg trajectory:</b> <span style="color:${dirColor};font-weight:600;">${dir}</span> (${first} → ${last} ng/mL across series).${dir==='rising'?' A rising Tg trend warrants imaging workup; consider calculating Tg doubling time.':''}</p>`;
+  }
+  h += `<p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Note: Tg values are only directly comparable when measured on the same assay and same stimulation status (LT4 vs stimulated).</p>`;
+  h += `</div></div>`;
+  const rc2 = document.getElementById('resultContent');
+  rc2.innerHTML = h + rc2.innerHTML;
+}
+
 </script>
 </body>
 </html>

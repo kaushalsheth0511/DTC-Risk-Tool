@@ -989,6 +989,16 @@
 
     <div class="card">
       <div class="card-header">This visit — enter current values only</div>
+
+      <div class="field" id="ret_completionField" style="display:none;">
+        <label>Has completion thyroidectomy been done since the last visit?</label>
+        <div class="toggle-group">
+          <button class="toggle-btn" onclick="toggle(this,'ret_completion','no')">No — still lobectomy only</button>
+          <button class="toggle-btn" onclick="toggle(this,'ret_completion','yes')">Yes — completion thyroidectomy done</button>
+        </div>
+        <div class="info-box">If completion thyroidectomy has been performed, this patient is now managed as a total thyroidectomy — Tg becomes a reliable tumour marker and the lobectomy caveat no longer applies. RAI may also now be an option based on pathology.</div>
+      </div>
+
       <div class="field">
         <label>Time since primary surgery (current)</label>
         <select id="ret_timeSurgery">
@@ -1008,6 +1018,9 @@
       <div class="field">
         <label>Current Serum Thyroglobulin (Tg) (ng/mL)</label>
         <input type="number" id="ret_tgValue" step="0.01" min="0" placeholder="e.g. 0.15">
+        <div class="info-box" id="ret_lobectomyTgNote" style="display:none; background:var(--moderate-bg, rgba(245,158,11,0.08)); border-color:var(--moderate-border, rgba(245,158,11,0.3));">
+          <b>After lobectomy:</b> routine Tg is <b>not recommended</b> as a tumour marker (Rec 9, 47D) — the remnant lobe secretes Tg. Only the <b>trend</b> over time is informative; neck ultrasound is the primary surveillance tool. You may leave this blank.
+        </div>
       </div>
       <div class="field">
         <label>Current Anti-Tg Antibodies (TgAb)</label>
@@ -1211,7 +1224,8 @@ let state = {
   recType: null, recResectable: null, recENE: null, recTempo: null,
   recBurden: null, recAvidity: null,
   // returning-patient follow-up
-  ret_tgContext: null, ret_tgab: null, ret_postUSG: null, ret_postWBS: null
+  ret_tgContext: null, ret_tgab: null, ret_postUSG: null, ret_postWBS: null,
+  ret_completion: null
 };
 
 // ========== MODE SELECTION ==========
@@ -1293,6 +1307,21 @@ function toggle(el, key, value) {
       // biochemical-only: no structural detail / RAI-avidity-of-lesion block needed
     }
   }
+
+  // Returning visit: completion thyroidectomy toggles the lobectomy Tg caveat
+  if (key === 'ret_completion') {
+    updateReturningTgNote();
+  }
+}
+
+// Show lobectomy Tg note in the returning form only if baseline was lobectomy AND
+// completion has NOT been done since.
+function updateReturningTgNote() {
+  const note = document.getElementById('ret_lobectomyTgNote');
+  if (!note) return;
+  const baseSurg = (loadedBaseline && loadedBaseline.fixed) ? loadedBaseline.fixed.surgery : null;
+  const stillLobectomy = (baseSurg === 'lobectomy') && (state.ret_completion !== 'yes');
+  note.style.display = stillLobectomy ? 'block' : 'none';
 }
 
 // Node details show/hide
@@ -3148,9 +3177,16 @@ function loadPatientForFollowup(key) {
     `<span style="color:var(--text-dim);">Last visit (${base.date}): Tg ${base.tgValue||'—'} ${base.tgContext?('('+base.tgContext+')'):''}, ${base.response||'—'}</span>`;
 
   // reset returning-form state
-  ['ret_tgContext','ret_tgab','ret_postUSG','ret_postWBS'].forEach(k=>state[k]=null);
+  ['ret_tgContext','ret_tgab','ret_postUSG','ret_postWBS','ret_completion'].forEach(k=>state[k]=null);
   document.querySelectorAll('#returning-section .toggle-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('ret_tgValue').value = '';
+
+  // If baseline surgery was lobectomy, offer the "completion done since?" question
+  // and show the lobectomy Tg caveat by default.
+  const wasLobectomy = (f.surgery === 'lobectomy');
+  const compField = document.getElementById('ret_completionField');
+  if (compField) compField.style.display = wasLobectomy ? 'block' : 'none';
+  updateReturningTgNote();
 
   showScreen('returning-section');
 }
@@ -3168,12 +3204,18 @@ function generateReturningVisit() {
   if (!loadedBaseline) { alert('No baseline loaded.'); return; }
   const f = loadedBaseline.fixed;
 
+  // Has completion thyroidectomy been done since last visit? (only relevant if baseline was lobectomy)
+  const completionDone = (f.surgery === 'lobectomy') && (state.ret_completion === 'yes');
+  // Effective surgery for this visit's assessment
+  const effSurgery = completionDone ? 'completion' : f.surgery;
+
   // require new visit values
   const tgCtx = state.ret_tgContext;
   const tgab = state.ret_tgab;
   const usg = state.ret_postUSG;
   const missing = [];
-  if (f.surgery !== 'lobectomy' && !tgCtx) missing.push('Tg assay context');
+  // Tg context required unless still a pure lobectomy (where Tg is unreliable/optional)
+  if (effSurgery !== 'lobectomy' && !tgCtx) missing.push('Tg assay context');
   if (!tgab) missing.push('TgAb status');
   if (!usg) missing.push('Current neck ultrasound');
   if (missing.length) { alert('Please enter this visit\'s values:\n\n• ' + missing.join('\n• ')); return; }
@@ -3187,7 +3229,7 @@ function generateReturningVisit() {
   setFieldValue('histology', f.histologyValue);
   setFieldValue('tCategory', f.T);
   setFieldValue('nCategory', f.N);
-  setFieldValue('surgery', f.surgery);
+  setFieldValue('surgery', effSurgery);
   setFieldValue('patientAge', f.age);
   setFieldValue('posNodes', f.posNodes || '');
   setFieldValue('nodeSize', f.nodeSize || '');
@@ -3206,8 +3248,9 @@ function generateReturningVisit() {
   state.mstatus = f.M;
   // this-visit varying state
   state.tgContext = tgCtx; state.tgab = tgab; state.postUSG = usg; state.postWBS = wbs;
-  // RAI: carry over from last visit's raiGiven if present
-  state.raiGiven = loadedBaseline.raiGiven || 'no';
+  // RAI: carry over from last visit's raiGiven if present.
+  // If completion was just done, RAI hasn't been given yet under the new total-thyroidectomy status.
+  state.raiGiven = completionDone ? 'no' : (loadedBaseline.raiGiven || 'no');
 
   // mark mode so report labels it a follow-up visit
   assessMode = 'returning';
